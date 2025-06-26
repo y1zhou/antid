@@ -1,0 +1,17 @@
+[project]
+name = "antid"
+version = "0.1.0"
+description = "Helper functions for antibody design."
+readme = "README.md"
+authors = [
+    { name = "Yi Zhou", email = "me@y1zhou.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+antid = "antid:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
