@@ -7,7 +7,12 @@ authors = [
     { name = "Yi Zhou", email = "me@y1zhou.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "biopython>=1.85",
+    "gemmi>=0.7.1",
+    "gemmi-program>=0.7.1",
+    "polars[calamine,numpy,pandas]>=1.31.0",
+]
 
 [project.scripts]
 antid = "antid:main"
