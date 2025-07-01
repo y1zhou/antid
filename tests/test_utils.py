@@ -1,0 +1,88 @@
+"""Tests for the utils module."""
+
+import pytest
+
+from antid.utils import check_path, command_runner, read_n_to_last_line
+
+
+# ruff: noqa: S101
+# Tests for check_path
+def test_check_path_creates_dir(tmp_path):
+    """Test that check_path creates a directory."""
+    dir_path = tmp_path / "test_dir"
+    check_path(dir_path, mkdir=True)
+    assert dir_path.is_dir()
+    assert dir_path.exists()
+
+    nested_dir = tmp_path / "test_dir" / "nested"
+    check_path(nested_dir, mkdir=True)
+    assert nested_dir.is_dir()
+    assert nested_dir.exists()
+
+
+def test_check_path_creates_parent_dir(tmp_path):
+    """Test that check_path creates a parent directory for a file."""
+    file_path = tmp_path / "test_dir" / "test_file.txt"
+    check_path(file_path, mkdir=True)
+    assert file_path.parent.is_dir()
+    assert file_path.parent.exists()
+
+
+def test_check_path_ignore_dots(tmp_path):
+    """Test that check_path ignores paths with dots."""
+    dot_path = tmp_path / "dir.to.create"
+    check_path(dot_path, mkdir=True, ignore_dots=True)
+    assert dot_path.is_dir()
+    assert dot_path.exists()
+
+    dot_path_with_file = tmp_path / "another.dir.to.create" / "file.txt"
+    check_path(dot_path_with_file, mkdir=True, ignore_dots=False)
+    assert dot_path_with_file.parent.is_dir()
+    assert dot_path_with_file.parent.exists()
+
+
+def test_check_path_exists_raises_error(tmp_path):
+    """Test that check_path raises an error if a path does not exist."""
+    with pytest.raises(FileNotFoundError):
+        check_path(tmp_path / "non_existent_file", exists=True)
+
+
+def test_check_path_resolves_path(tmp_path):
+    """Test that check_path returns a resolved path."""
+    relative_path = ".."
+    resolved_path = check_path(tmp_path / relative_path)
+    assert resolved_path == tmp_path.parent.resolve()
+
+
+# Tests for command_runner
+def test_command_runner_logs_output(tmp_path):
+    """Test that command_runner logs command output to a file."""
+    log_file = tmp_path / "test.log"
+    command = ["echo", "hello world"]
+    command_runner(command, cwd=tmp_path, log_file=log_file)
+
+    with open(log_file) as f:
+        content = f.read()
+        assert "hello world" in content
+        assert "Command: echo hello world" in content
+
+
+# Tests for read_n_to_last_line
+def test_read_n_to_last_line(tmp_path):
+    """Test that read_n_to_last_line reads the correct line."""
+    file_path = tmp_path / "test.txt"
+    lines = ["line 1", "line 2", "line 3"]
+    with open(file_path, "w") as f:
+        for line in lines:
+            f.write(line + "\n")
+
+    assert read_n_to_last_line(file_path, n=1).strip() == "line 3"
+    assert read_n_to_last_line(file_path, n=2).strip() == "line 2"
+    assert read_n_to_last_line(file_path, n=3).strip() == "line 1"
+
+
+def test_read_n_to_last_line_empty_file(tmp_path):
+    """Test read_n_to_last_line on an empty file."""
+    file_path = tmp_path / "empty.txt"
+    file_path.touch()
+    assert read_n_to_last_line(file_path) == ""

@@ -6,7 +6,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 
-def check_path(p: str | Path, mkdir: bool = False, exists: bool = False) -> Path:
+def check_path(
+    p: str | Path, mkdir: bool = False, exists: bool = False, ignore_dots: bool = False
+) -> Path:
     """Canonical way of dealing with file paths.
 
     Args:
@@ -16,6 +18,9 @@ def check_path(p: str | Path, mkdir: bool = False, exists: bool = False) -> Path
             directory is created at ``p`` if it doesn't have a suffix, and at
             its parent if it does have a suffix.
         exists: raise an error if ``p`` does not exist.
+        ignore_dots: if True, ignore periods in the path when making directories.
+            For example, ``/foo.bar`` will create the directory with the
+            name ``foo.bar`` instead of treating it as a file.
 
     Returns:
         The absolute path to ``p``.
@@ -26,7 +31,7 @@ def check_path(p: str | Path, mkdir: bool = False, exists: bool = False) -> Path
             raise FileNotFoundError(filepath)
     if mkdir:
         # When the file path doesn't exist
-        if filepath.suffix:
+        if filepath.suffix and not ignore_dots:
             filepath.parent.mkdir(parents=True, exist_ok=True)
         else:
             filepath.mkdir(parents=True, exist_ok=True)
@@ -75,7 +80,7 @@ def command_runner(
             f.write("\nFinish time: " + str(datetime.now(UTC)) + "\n")
 
 
-def read_n_to_last_line(filename, n=1, decode: bool = True):
+def read_n_to_last_line(filename, n=1, decode: bool = True) -> str | bytes:
     """Returns the nth before last line of a file (n=1 gives last line).
 
     Note that if your last line is empty then it skips it.
