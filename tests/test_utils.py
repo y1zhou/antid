@@ -67,6 +67,20 @@ def test_command_runner_logs_output(tmp_path):
         assert "Command: echo hello world" in content
 
 
+# Tests for command_runner with verbose output to stdout
+def test_command_runner_verbose_output(tmp_path, capsys):
+    """Test that command_runner logs command output to a file."""
+    log_file = "/dev/null"
+    command = ["echo", "hello world"]
+    command_runner(
+        command, cwd=tmp_path, log_file=log_file, verbose=True, track_metadata=False
+    )
+    captured = capsys.readouterr()
+    # with capsys.disabled():
+    #     print(captured)
+    assert "hello world\n" == captured.out
+
+
 # Tests for read_n_to_last_line
 def test_read_n_to_last_line(tmp_path):
     """Test that read_n_to_last_line reads the correct line."""
@@ -86,3 +100,12 @@ def test_read_n_to_last_line_empty_file(tmp_path):
     file_path = tmp_path / "empty.txt"
     file_path.touch()
     assert read_n_to_last_line(file_path) == ""
+
+
+def test_read_n_to_last_line_return_bytes(tmp_path):
+    """Test read_n_to_last_line without decoding."""
+    file_path = tmp_path / "test.txt"
+    with open(file_path, "w") as f:
+        f.write("line 1\n")
+
+    assert read_n_to_last_line(file_path, n=1, decode=False) == b"line 1\n"
