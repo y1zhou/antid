@@ -9,11 +9,13 @@ A Python package containing helper functions for antibody design.
 Install `antid` from PyPI. It is recommended to use a virtual environment.
 
 With `uv`:
+
 ```bash
 uv pip install antid
 ```
 
 With `pip`:
+
 ```bash
 pip install antid
 ```
@@ -28,8 +30,8 @@ To set up a development environment, clone the repository and use `uv` to create
 
 ```bash
 # Clone the repository
-git clone https://github.com/y1zhou/pd-utils.git
-cd pd-utils
+git clone https://github.com/y1zhou/antid.git
+cd antid
 
 # Create and activate a virtual environment
 uv venv antid
