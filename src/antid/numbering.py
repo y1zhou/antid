@@ -276,10 +276,26 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
             region_labels,
         )
         self.closest_germline = closest_germline
+        self._aligned_germline = None
 
-        aligned_germline = self._align_germline()
+    @property
+    def aligned_germline(self) -> pl.DataFrame:
+        """Align the germline sequence to the numbered sequence."""
+        if self._aligned_germline is not None:
+            return self._aligned_germline
+
+        if not self.closest_germline:
+            raise ValueError("No closest germline assigned.")
+
+        aligned_germline = align_ab_seqs(
+            [self, self.closest_germline.numbered_seq(self.scheme)], include_region=True
+        ).with_columns(
+            pl.col("seq_id").replace_strict(
+                {"region": "region", "0": "self", "1": "germline"}
+            )
+        )
         aligned_positions = aligned_germline.drop("seq_id").columns
-        self.aligned_germline = (
+        self._aligned_germline = (
             aligned_germline.drop("seq_id")
             .transpose()
             .select(
@@ -290,6 +306,7 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
             )
             .with_row_index(name="fv_idx", offset=1)
         )
+        return self._aligned_germline
 
     def format(
         self,
@@ -323,18 +340,6 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
     def __repr__(self) -> str:
         """Return a string representation of the numbered sequence with germline."""
         return self.format(show_germline=True)
-
-    def _align_germline(self) -> pl.DataFrame:
-        """Align the germline sequence to the numbered sequence."""
-        if not self.closest_germline:
-            raise ValueError("No closest germline assigned.")
-        return align_ab_seqs(
-            [self, self.closest_germline.numbered_seq(self.scheme)], include_region=True
-        ).with_columns(
-            pl.col("seq_id").replace_strict(
-                {"region": "region", "0": "self", "1": "germline"}
-            )
-        )
 
     def _build_germline_alignment_str(
         self, formatted: bool = True
