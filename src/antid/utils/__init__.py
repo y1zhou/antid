@@ -1,6 +1,7 @@
 """General unitility functions."""
 
 import os
+import shutil
 import subprocess as sp
 from datetime import UTC, datetime
 from pathlib import Path
@@ -37,6 +38,23 @@ def check_path(
             filepath.mkdir(parents=True, exist_ok=True)
 
     return filepath
+
+
+def find_binary(name: str | Path) -> str:
+    """Find a binary executable in the system PATH.
+
+    Args:
+        name: Name of the executable to find. Can be a path or just the name.
+
+    Returns:
+        The absolute path to the executable if found.
+    """
+    exe = shutil.which(name)
+    if exe is None:
+        raise FileNotFoundError(f"Executable '{name}' not found in system PATH.")
+    if not os.access(exe, os.X_OK):
+        raise PermissionError(f"Executable '{exe}' is not executable.")
+    return exe
 
 
 def command_runner(
