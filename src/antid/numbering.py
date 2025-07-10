@@ -291,13 +291,27 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
             .with_row_index(name="fv_idx", offset=1)
         )
 
-    def __repr__(self) -> str:
-        """Return a string representation of the numbered sequence with germline."""
+    def format(
+        self,
+        show_germline: bool = True,
+        include_non_fv: bool = True,
+        highlight_cdr: bool = True,
+    ) -> str:
+        """Format the numbered sequence with optional CDR highlighting and germline alignment."""
+        if not show_germline:
+            return super().format(
+                include_non_fv=include_non_fv, highlight_cdr=highlight_cdr
+            )
+
         self_aligned, aln_indicator, germline_aligned = (
             self._build_germline_alignment_str()
         )
         return (
-            super().__repr__() + f"\n\n\033[1m# Closest germline\033[0m\n\n"
+            super().format(
+                include_non_fv=include_non_fv,
+                highlight_cdr=highlight_cdr,
+            )
+            + f"\n\n\033[1m# Closest germline\033[0m\n\n"
             f"Species: {self.closest_germline.species} ({self.chain_type})\n"
             f"V gene: {self.closest_germline.v_gene}\n"
             f"J gene: {self.closest_germline.j_gene}\n\n"
@@ -305,6 +319,10 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
             f"           {aln_indicator}\n"
             f" Germline: {germline_aligned}"
         )
+
+    def __repr__(self) -> str:
+        """Return a string representation of the numbered sequence with germline."""
+        return self.format(show_germline=True)
 
     def _align_germline(self) -> pl.DataFrame:
         """Align the germline sequence to the numbered sequence."""
