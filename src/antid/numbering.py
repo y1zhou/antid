@@ -412,7 +412,8 @@ def number_ab_seq(
         )
 
     chain_annotator: SingleChainAnnotator = SingleChainAnnotator(scheme=scheme)
-    numbering, percent_identity, chain_type, err = chain_annotator.analyze_seq(seq)
+    alignment: tuple[list[str], float, str, str] = chain_annotator.analyze_seq(seq)
+    numbering, percent_identity, chain_type, err = alignment
 
     if err:
         logger.warning(f"For {seq=}: {err}")
@@ -423,14 +424,14 @@ def number_ab_seq(
         logger.warning(f"{warning_msg}: {seq}")
     region_labels: list[str] = chain_annotator.assign_cdr_labels(numbering, chain_type)
 
+    numbered_ab = NumberedAntibody(
+        seq, scheme, numbering, percent_identity, chain_type, err, region_labels
+    )
     if not assign_germline:
-        return NumberedAntibody(
-            seq, scheme, numbering, percent_identity, chain_type, err, region_labels
-        )
+        return numbered_ab
 
     # Assign VJ germline genes
-    closest_germline = assign_closest_germline(seq, species)
-
+    closest_germline = assign_closest_germline(numbered_ab, species=species)
     return NumberedAntibodyWithGermline(
         seq,
         scheme,
@@ -443,28 +444,36 @@ def number_ab_seq(
     )
 
 
-def assign_closest_germline(seq: str, species: str = "unknown") -> Germline:
+def assign_closest_germline(
+    numbered_ab: NumberedAntibody, species: str = "unknown"
+) -> Germline:
     """Assign the closest germline to the sequence.
 
     NOTE: When multiple V/J genes with very close scores are found, the first one in the list is returned.
     """
     # The assignment works best with IMGT numbering
-    chain_annotator: SingleChainAnnotator = SingleChainAnnotator(scheme="imgt")
-    alignment = chain_annotator.analyze_seq(seq)
-    vj_annotator: VJGeneTool = VJGeneTool(scheme="imgt")
+    # Only use Fv region for VJ gene assignment because of upstream issue:
+    # https://github.com/jlparkI/AntPack/issues/31
+    numbering = (
+        numbered_ab.position.filter(pl.col("region") != pl.lit("-"))
+        .get_column("numbered_pos")
+        .to_list()
+    )
+    alignment = (numbering, *numbered_ab._raw[1:])
+    vj_annotator: VJGeneTool = VJGeneTool(scheme=numbered_ab.scheme)
     v_genes, j_genes, v_blosum, j_blosum, species = vj_annotator.assign_vj_genes(
         alignment,
-        seq,
+        numbered_ab.fv_seq,
         species=species,  # human, mouse, alpaca, rabbit
         mode="evalue",  # better alignment than "identity" but may fail
     )
     if not (v_genes and j_genes):
         # Fallback to identity mode if evalue mode fails
         v_genes, j_genes, v_ident, j_ident, species = vj_annotator.assign_vj_genes(
-            alignment, seq, species=species, mode="identity"
+            alignment, numbered_ab.fv_seq, species=species, mode="identity"
         )
     if not (v_genes and j_genes):
-        raise ValueError(f"Failed to assign V and J genes for sequence: {seq}.")
+        raise ValueError(f"Failed to assign V and J genes for sequence: {numbered_ab}.")
 
     v_gene = v_genes.split("_")[0]
     j_gene = j_genes.split("_")[0]
