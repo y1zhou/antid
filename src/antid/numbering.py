@@ -4,10 +4,10 @@ from dataclasses import dataclass
 from typing import Literal, overload
 
 import polars as pl
-from antpack import SingleChainAnnotator
 from loguru import logger
 
-from antid.utils.patch_antpack import VJGeneTool
+# from antpack import SingleChainAnnotator, VJGeneTool
+from antid.utils.patch_antpack import SingleChainAnnotator, VJGeneTool
 
 __all__ = ["number_ab_seq", "align_ab_seqs"]
 

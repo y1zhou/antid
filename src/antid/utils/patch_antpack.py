@@ -12,7 +12,8 @@ from pathlib import Path
 
 import antpack
 import numpy as np
-from antpack.antpack_cpp_ext import VJMatchCounter
+from antpack.antpack_cpp_ext import SingleChainAnnotatorCpp, VJMatchCounter
+from antpack.numbering_tools.cterm_finder import _load_nterm_kmers
 from antpack.utilities.vj_utilities import load_vj_gene_consensus_db
 
 antpack_path = Path(antpack.__file__).parent.resolve()
@@ -51,3 +52,15 @@ class VJGeneTool(VJMatchCounter):
         from IMGT or OGRDB.
         """
         return self.retrieved_dates
+
+
+consensus_path = str(antpack_path / "numbering_tools" / "consensus_data")
+kmer_dict = _load_nterm_kmers()
+
+
+class SingleChainAnnotator(SingleChainAnnotatorCpp):
+    """Patched version of antpack.SingleChainAnnotator."""
+
+    def __init__(self, chains=["H", "K", "L"], scheme="imgt"):
+        """Patched version of antpack.SingleChainAnnotator with global variables."""
+        super().__init__(chains, scheme, consensus_path, kmer_dict)
