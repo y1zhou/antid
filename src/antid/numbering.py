@@ -432,14 +432,15 @@ def number_ab_seq(
         # logger.warning(f"{warning_msg}: {seq}")
     region_labels: list[str] = chain_annotator.assign_cdr_labels(numbering, chain_type)
 
-    numbered_ab = NumberedAntibody(
-        seq, scheme, numbering, percent_identity, chain_type, err, region_labels
-    )
     if not assign_germline:
-        return numbered_ab
+        return NumberedAntibody(
+            seq, scheme, numbering, percent_identity, chain_type, err, region_labels
+        )
 
     # Assign VJ germline genes
-    closest_germline = assign_closest_germline(numbered_ab, species=species)
+    closest_germline = assign_closest_germline(
+        alignment, seq, region_labels, scheme=scheme, species=species
+    )
     return NumberedAntibodyWithGermline(
         seq,
         scheme,
@@ -453,7 +454,11 @@ def number_ab_seq(
 
 
 def assign_closest_germline(
-    numbered_ab: NumberedAntibody, species: str = "unknown"
+    alignment: tuple[list[str], float, str, str],
+    seq: str,
+    region_labels: list[str],
+    scheme: str,
+    species: str = "unknown",
 ) -> Germline:
     """Assign the closest germline to the sequence.
 
@@ -462,30 +467,42 @@ def assign_closest_germline(
     # The assignment works best with IMGT numbering
     # Only use Fv region for VJ gene assignment because of upstream issue:
     # https://github.com/jlparkI/AntPack/issues/31
-    numbering = (
-        numbered_ab.position.filter(pl.col("region") != pl.lit("-"))
-        .get_column("numbered_pos")
-        .to_list()
+    full_seq_len = len(seq)
+    fv_start = next((i for i, label in enumerate(region_labels) if label != "-"), -1)
+    fv_end = next(
+        (
+            full_seq_len - i
+            for i, label in enumerate(reversed(region_labels))
+            if label != "-"
+        ),
+        -1,
     )
-    alignment = (numbering, *numbered_ab._raw[1:])
-    vj_annotator: VJGeneTool = VJGeneTool(scheme=numbered_ab.scheme)
+    if fv_start == -1 or fv_end == -1:
+        raise ValueError(
+            "Fv region not found in the sequence. Ensure the sequence is properly formatted."
+        )
+
+    fv_seq = seq[fv_start:fv_end]
+    fv_alignment = (alignment[0][fv_start:fv_end], *alignment[1:])
+
+    vj_annotator: VJGeneTool = VJGeneTool(scheme=scheme)
     v_genes, j_genes, v_blosum, j_blosum, species = vj_annotator.assign_vj_genes(
-        alignment,
-        numbered_ab.fv_seq,
+        fv_alignment,
+        fv_seq,
         species=species,  # human, mouse, alpaca, rabbit
         mode="evalue",  # better alignment than "identity" but may fail
     )
     if not (v_genes and j_genes):
         # Fallback to identity mode if evalue mode fails
         logger.warning(
-            f"Failed to assign V and J genes for sequence: {numbered_ab.fv_seq} using evalue mode. "
+            f"Failed to assign V and J genes for sequence: {fv_seq} using evalue mode. "
             "Falling back to identity mode."
         )
         v_genes, j_genes, v_ident, j_ident, species = vj_annotator.assign_vj_genes(
-            alignment, numbered_ab.fv_seq, species=species, mode="identity"
+            fv_alignment, fv_seq, species=species, mode="identity"
         )
     if not (v_genes and j_genes):
-        raise ValueError(f"Failed to assign V and J genes for sequence: {numbered_ab}.")
+        raise ValueError(f"Failed to assign V and J genes for sequence: {seq}.")
 
     v_gene = v_genes.split("_")[0]
     j_gene = j_genes.split("_")[0]
