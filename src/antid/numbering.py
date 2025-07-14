@@ -1,11 +1,13 @@
 """Antibody numbering utilities."""
 
 from dataclasses import dataclass
-from typing import overload
+from typing import Literal, overload
 
 import polars as pl
-from antpack import SingleChainAnnotator, VJGeneTool
+from antpack import SingleChainAnnotator
 from loguru import logger
+
+from antid.utils.patch_antpack import VJGeneTool
 
 __all__ = ["number_ab_seq", "align_ab_seqs"]
 
@@ -387,11 +389,17 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
 
 @overload
 def number_ab_seq(
-    seq: str, scheme: str, assign_germline: bool = False, species: str = "unknown"
+    seq: str,
+    scheme: str,
+    assign_germline: Literal[False] = False,
+    species: str = "unknown",
 ) -> NumberedAntibody: ...
 @overload
 def number_ab_seq(
-    seq: str, scheme: str, assign_germline: bool = True, species: str = "unknown"
+    seq: str,
+    scheme: str,
+    assign_germline: Literal[True] = True,
+    species: str = "unknown",
 ) -> NumberedAntibodyWithGermline: ...
 def number_ab_seq(
     seq: str, scheme: str, assign_germline: bool = False, species: str = "unknown"
@@ -415,13 +423,13 @@ def number_ab_seq(
     alignment: tuple[list[str], float, str, str] = chain_annotator.analyze_seq(seq)
     numbering, percent_identity, chain_type, err = alignment
 
-    if err:
-        logger.warning(f"For {seq=}: {err}")
+    # if err:
+    #     logger.warning(f"For {seq=}: {err}")
     if percent_identity < 0.85:
         warning_msg = f"Percent identity ({percent_identity:.2%}) is low for assigned chain type {chain_type}"
         if percent_identity < 0.7:
             raise ValueError(warning_msg, seq)
-        logger.warning(f"{warning_msg}: {seq}")
+        # logger.warning(f"{warning_msg}: {seq}")
     region_labels: list[str] = chain_annotator.assign_cdr_labels(numbering, chain_type)
 
     numbered_ab = NumberedAntibody(
@@ -469,6 +477,10 @@ def assign_closest_germline(
     )
     if not (v_genes and j_genes):
         # Fallback to identity mode if evalue mode fails
+        logger.warning(
+            f"Failed to assign V and J genes for sequence: {numbered_ab.fv_seq} using evalue mode. "
+            "Falling back to identity mode."
+        )
         v_genes, j_genes, v_ident, j_ident, species = vj_annotator.assign_vj_genes(
             alignment, numbered_ab.fv_seq, species=species, mode="identity"
         )
