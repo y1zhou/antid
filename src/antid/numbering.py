@@ -10,6 +10,7 @@ from loguru import logger
 from antid.utils.patch_antpack import SingleChainAnnotator, VJGeneTool
 
 __all__ = ["number_ab_seq", "align_ab_seqs"]
+valid_schemes = Literal["imgt", "martin", "kabat", "aho"]
 
 
 class NumberedAntibody:
@@ -32,7 +33,7 @@ class NumberedAntibody:
     def __init__(
         self,
         seq: str,
-        scheme: str,
+        scheme: valid_schemes,
         numbering: list[str],
         percent_identity: float,
         chain_type: str,
@@ -41,7 +42,7 @@ class NumberedAntibody:
     ):
         """Initialize with the output of ``SingleChainAnnotator.analyze_seq``."""
         self.seq = seq
-        self.scheme = scheme
+        self.scheme: valid_schemes = scheme
         self.chain_type = chain_type
         self._raw = (numbering, percent_identity, chain_type, error_message)
 
@@ -230,9 +231,11 @@ class Germline:
             else "".join(c for c in merged_seq_aas if c != "-")
         )
 
-    def numbered_seq(self, scheme: str = "imgt") -> NumberedAntibody:
+    def numbered_seq(self, scheme: valid_schemes = "imgt") -> NumberedAntibody:
         """Return the numbered germline according to the specified scheme."""
-        return number_ab_seq(self.seq(trimmed=True), scheme, assign_germline=False)
+        return number_ab_seq(
+            self.seq(trimmed=True), scheme, assign_germline=False, species=self.species
+        )
 
     def __repr__(self) -> str:
         """Return a string representation of the germline."""
@@ -259,7 +262,7 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
     def __init__(
         self,
         seq: str,
-        scheme: str,
+        scheme: valid_schemes,
         numbering: list[str],
         percent_identity: float,
         chain_type: str,
@@ -290,7 +293,8 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
             raise ValueError("No closest germline assigned.")
 
         aligned_germline = align_ab_seqs(
-            [self, self.closest_germline.numbered_seq(self.scheme)], include_region=True
+            [self, self.closest_germline.numbered_seq(self.scheme)],
+            include_region=True,
         ).with_columns(
             pl.col("seq_id").replace_strict(
                 {"region": "region", "0": "self", "1": "germline"}
@@ -389,20 +393,25 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
 
 @overload
 def number_ab_seq(
-    seq: str,
-    scheme: str,
-    assign_germline: Literal[False] = False,
-    species: str = "unknown",
+    seq: str, scheme: valid_schemes, assign_germline: Literal[False], species: str
 ) -> NumberedAntibody: ...
 @overload
 def number_ab_seq(
-    seq: str,
-    scheme: str,
-    assign_germline: Literal[True] = True,
-    species: str = "unknown",
+    seq: str, scheme: valid_schemes, assign_germline: Literal[True], species: str
 ) -> NumberedAntibodyWithGermline: ...
+@overload
 def number_ab_seq(
-    seq: str, scheme: str, assign_germline: bool = False, species: str = "unknown"
+    seq: list[str], scheme: valid_schemes, assign_germline: Literal[False], species: str
+) -> list[NumberedAntibody]: ...
+@overload
+def number_ab_seq(
+    seq: list[str], scheme: valid_schemes, assign_germline: Literal[True], species: str
+) -> list[NumberedAntibodyWithGermline]: ...
+def number_ab_seq(
+    seq: str | list[str],
+    scheme: valid_schemes,
+    assign_germline: bool = False,
+    species: str = "unknown",
 ):
     """Number the sequence according to IMGT numbering scheme.
 
@@ -414,32 +423,94 @@ def number_ab_seq(
             looks for all of human, mouse, alpaca, and rabbit.
     """
     # Antibody numbering
-    if scheme not in {"imgt", "martin", "kabat", "aho"}:
-        raise ValueError(
-            f"Invalid numbering scheme: {scheme}. Must be one of 'imgt', 'martin', 'kabat', or 'aho'."
-        )
-
     chain_annotator: SingleChainAnnotator = SingleChainAnnotator(scheme=scheme)
-    alignment: tuple[list[str], float, str, str] = chain_annotator.analyze_seq(seq)
+
+    if assign_germline:
+        vj_annotator = VJGeneTool(scheme=scheme)
+        if isinstance(seq, str):
+            alignment: tuple[list[str], float, str, str] = chain_annotator.analyze_seq(
+                seq
+            )
+            return _process_alignment_with_germline(
+                alignment, seq, chain_annotator, vj_annotator, scheme, species
+            )
+        elif isinstance(seq, list):
+            alignments: list[tuple[list[str], float, str, str]] = (
+                chain_annotator.analyze_seqs(seq)
+            )
+            return [
+                _process_alignment_with_germline(
+                    alignment, s, chain_annotator, vj_annotator, scheme, species
+                )
+                for alignment, s in zip(alignments, seq, strict=True)
+            ]
+        else:
+            raise TypeError(
+                f"Sequence must be a string or a list of strings, not {type(seq)}."
+            )
+    else:
+        if isinstance(seq, str):
+            alignment: tuple[list[str], float, str, str] = chain_annotator.analyze_seq(
+                seq
+            )
+            return _process_alignment(alignment, seq, chain_annotator, scheme)
+        elif isinstance(seq, list):
+            alignments: list[tuple[list[str], float, str, str]] = (
+                chain_annotator.analyze_seqs(seq)
+            )
+            return [
+                _process_alignment(alignment, s, chain_annotator, scheme)
+                for alignment, s in zip(alignments, seq, strict=True)
+            ]
+        else:
+            raise TypeError(
+                f"Sequence must be a string or a list of strings, not {type(seq)}."
+            )
+
+
+def _assign_region_labels(
+    alignment: tuple[list[str], float, str, str], chain_annotator: SingleChainAnnotator
+) -> list[str]:
+    """Assign region labels to the numbered alignment."""
     numbering, percent_identity, chain_type, err = alignment
 
-    # if err:
-    #     logger.warning(f"For {seq=}: {err}")
     if percent_identity < 0.85:
-        warning_msg = f"Percent identity ({percent_identity:.2%}) is low for assigned chain type {chain_type}"
-        if percent_identity < 0.7:
-            raise ValueError(warning_msg, seq)
+        warning_msg = f"{err}\nPercent identity ({percent_identity:.2%}) is low for assigned chain type {chain_type}"
         # logger.warning(f"{warning_msg}: {seq}")
-    region_labels: list[str] = chain_annotator.assign_cdr_labels(numbering, chain_type)
+        if percent_identity < 0.7:
+            raise ValueError(warning_msg)
+    return chain_annotator.assign_cdr_labels(numbering, chain_type)
 
-    if not assign_germline:
-        return NumberedAntibody(
-            seq, scheme, numbering, percent_identity, chain_type, err, region_labels
-        )
+
+def _process_alignment(
+    alignment: tuple[list[str], float, str, str],
+    seq: str,
+    chain_annotator: SingleChainAnnotator,
+    scheme: valid_schemes,
+) -> NumberedAntibody:
+    """Process the alignment output to extract relevant information."""
+    numbering, percent_identity, chain_type, err = alignment
+    region_labels: list[str] = _assign_region_labels(alignment, chain_annotator)
+
+    return NumberedAntibody(
+        seq, scheme, numbering, percent_identity, chain_type, err, region_labels
+    )
+
+
+def _process_alignment_with_germline(
+    alignment: tuple[list[str], float, str, str],
+    seq: str,
+    chain_annotator: SingleChainAnnotator,
+    vj_annotator: VJGeneTool,
+    scheme: valid_schemes,
+    species: str = "unknown",
+) -> NumberedAntibodyWithGermline:
+    numbering, percent_identity, chain_type, err = alignment
+    region_labels: list[str] = _assign_region_labels(alignment, chain_annotator)
 
     # Assign VJ germline genes
-    closest_germline = assign_closest_germline(
-        alignment, seq, region_labels, scheme=scheme, species=species
+    closest_germline = _assign_closest_germline(
+        alignment, seq, region_labels, vj_annotator=vj_annotator, species=species
     )
     return NumberedAntibodyWithGermline(
         seq,
@@ -453,11 +524,11 @@ def number_ab_seq(
     )
 
 
-def assign_closest_germline(
+def _assign_closest_germline(
     alignment: tuple[list[str], float, str, str],
     seq: str,
     region_labels: list[str],
-    scheme: str,
+    vj_annotator: VJGeneTool,
     species: str = "unknown",
 ) -> Germline:
     """Assign the closest germline to the sequence.
@@ -485,12 +556,13 @@ def assign_closest_germline(
     fv_seq = seq[fv_start:fv_end]
     fv_alignment = (alignment[0][fv_start:fv_end], *alignment[1:])
 
-    vj_annotator: VJGeneTool = VJGeneTool(scheme=scheme)
-    v_genes, j_genes, v_blosum, j_blosum, species = vj_annotator.assign_vj_genes(
-        fv_alignment,
-        fv_seq,
-        species=species,  # human, mouse, alpaca, rabbit
-        mode="evalue",  # better alignment than "identity" but may fail
+    v_genes, j_genes, v_blosum, j_blosum, assigned_species = (
+        vj_annotator.assign_vj_genes(
+            fv_alignment,
+            fv_seq,
+            species=species,  # human, mouse, alpaca, rabbit
+            mode="evalue",  # better alignment than "identity" but may fail
+        )
     )
     if not (v_genes and j_genes):
         # Fallback to identity mode if evalue mode fails
@@ -498,17 +570,19 @@ def assign_closest_germline(
             f"Failed to assign V and J genes for sequence: {fv_seq} using evalue mode. "
             "Falling back to identity mode."
         )
-        v_genes, j_genes, v_ident, j_ident, species = vj_annotator.assign_vj_genes(
-            fv_alignment, fv_seq, species=species, mode="identity"
+        v_genes, j_genes, v_ident, j_ident, assigned_species = (
+            vj_annotator.assign_vj_genes(
+                fv_alignment, fv_seq, species=species, mode="identity"
+            )
         )
     if not (v_genes and j_genes):
         raise ValueError(f"Failed to assign V and J genes for sequence: {seq}.")
 
     v_gene = v_genes.split("_")[0]
     j_gene = j_genes.split("_")[0]
-    v_seq: str | None = vj_annotator.get_vj_gene_sequence(v_gene, species)
-    j_seq: str | None = vj_annotator.get_vj_gene_sequence(j_gene, species)
-    return Germline(v_gene, j_gene, species, v_seq, j_seq)
+    v_seq: str | None = vj_annotator.get_vj_gene_sequence(v_gene, assigned_species)
+    j_seq: str | None = vj_annotator.get_vj_gene_sequence(j_gene, assigned_species)
+    return Germline(v_gene, j_gene, assigned_species, v_seq, j_seq)
 
 
 def align_ab_seqs(
@@ -637,12 +711,16 @@ def _build_alignment_indicator(seq1: str, seq2: str) -> str:
 if __name__ == "__main__":
     # Example usage on Pembrolizumab (5b8c), with additional His-tag on the N-terminus
     # and GS linker on the C-terminus.
-    vh = "HHHHHQVQLVQSGVEVKKPGASVKVSCKASGYTFTNYYMYWVRQAPGQGLEWMGGINPSNGGTNFNEKFKNRVTLTTDSSTTTAYMELKSLQFDDTAVYYCARRDYRFDMGFDYWGQGTTVTVSSGGGSGGGSGGGS"
-    vh_numbered = number_ab_seq(vh, "martin", assign_germline=True)
+    vh = "QVQLVQSGVEVKKPGASVKVSCKASGYTFTNYYMYWVRQAPGQGLEWMGGINPSNGGTNFNEKFKNRVTLTTDSSTTTAYMELKSLQFDDTAVYYCARRDYRFDMGFDYWGQGTTVTVSS"
+    vh_numbered = number_ab_seq(
+        "HHHHH" + vh + "GGGGS" * 3, "martin", assign_germline=True, species="unknown"
+    )
     print("\n#######\n# VH  #\n#######")
     print(repr(vh_numbered))
 
-    vl = "HHHHHEIVLTQSPATLSLSPGERATLSCRASKGVSTSGYSYLHWYQQKPGQAPRLLIYLASYLESGVPARFSGSGSGTDFTLTISSLEPEDFAVYYCQHSRDLPLTFGGGTKVEIKTSENLYFQGGGSGGGSGGGS"
+    vl = "EIVLTQSPATLSLSPGERATLSCRASKGVSTSGYSYLHWYQQKPGQAPRLLIYLASYLESGVPARFSGSGSGTDFTLTISSLEPEDFAVYYCQHSRDLPLTFGGGTKVEIKTSENLYFQ"
     print("\n#######\n# VL  #\n#######")
-    vl_numbered = number_ab_seq(vl, "martin", assign_germline=True)
+    vl_numbered = number_ab_seq(
+        "HHHHH" + vl, "martin", assign_germline=True, species="unknown"
+    )
     print(repr(vl_numbered))
