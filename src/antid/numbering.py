@@ -316,8 +316,32 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
                 pl.col("column_2").alias("germline"),
             )
             .with_row_index(name="fv_idx", offset=1)
+            .with_columns(
+                pl.when(
+                    (pl.col("seq") == pl.lit("-"))
+                    & (pl.col("region").is_in({"FR1", "FR4"}))
+                )
+                .then(pl.col("germline"))
+                .otherwise(pl.col("seq"))
+                .alias("imputed_seq")
+            )
         )
         return self._aligned_germline
+
+    @property
+    def imputed_seq(self) -> str:
+        """Impute gaps in the FR1/FR4 region with the closest germline."""
+        imputed_seq = "".join(
+            self.aligned_germline.filter(pl.col("imputed_seq") != pl.lit("-"))
+            .get_column("imputed_seq")
+            .to_list()
+        )
+        if self.fv_seq not in imputed_seq:
+            raise ValueError(
+                f"Fv sequence {self.fv_seq} not found in the imputed sequence {imputed_seq}. "
+                "This may indicate an alignment containing gaps within the Fv region."
+            )
+        return imputed_seq
 
     def format(
         self,
