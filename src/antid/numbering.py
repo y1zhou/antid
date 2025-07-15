@@ -137,8 +137,10 @@ class NumberedAntibody:
             c_term_seq = self.seq[self.fv_range[1] :]
 
             # Gray out non-Fv regions
-            n_term_seq = f"\033[2m{n_term_seq}\033[0m"
-            c_term_seq = f"\033[2m{c_term_seq}\033[0m"
+            if n_term_seq:
+                n_term_seq = f"\033[2m{n_term_seq}\033[0m"
+            if c_term_seq:
+                c_term_seq = f"\033[2m{c_term_seq}\033[0m"
         else:
             n_term_seq, c_term_seq = "", ""
 
@@ -175,15 +177,18 @@ class NumberedAntibody:
         """Return the length of the input sequence."""
         return len(self.seq)
 
-    def __getitem__(self, i: int | str) -> str:
+    def __getitem__(self, i: int | str | slice) -> str:
         """Get the sequence for a specific index or numbered position."""
         if isinstance(i, int):
             return self.seq[i]
         elif isinstance(i, str):
-            return self.position.filter(pl.col("numbered_pos") == pl.lit(i)).item(
-                0, "seq"
-            )
+            pos = self.position.filter(pl.col("numbered_pos") == pl.lit(i))
+            if pos.is_empty():
+                raise IndexError(f"Numbered position {i} not found.")
+            return pos.item(0, "seq")
         # TODO: support slices
+        elif isinstance(i, slice):
+            raise NotImplementedError("Slicing is not supported yet.")
         else:
             raise TypeError(
                 f"Index must be an integer or a numbered position string, not {type(i)}."
@@ -207,8 +212,8 @@ class Germline:
     v_gene: str
     j_gene: str
     species: AssignedSpeciesType
-    v_gene_seq: str | None
-    j_gene_seq: str | None
+    v_gene_seq: str
+    j_gene_seq: str
 
     def seq(self, trimmed: bool = False) -> str:
         """Return the merged germline sequence.
@@ -216,10 +221,6 @@ class Germline:
         Args:
             trimmed: If True, trim the sequence to remove gaps.
         """
-        if not (self.v_gene_seq and self.j_gene_seq):
-            raise ValueError(
-                "Provided v_gene and j_gene did not both match to a germline."
-            )
         merged_seq_aas: list[str] = []
         for v, j in zip(self.v_gene_seq, self.j_gene_seq, strict=True):
             if j == "-":
@@ -293,9 +294,6 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
         """Align the germline sequence to the numbered sequence."""
         if self._aligned_germline is not None:
             return self._aligned_germline
-
-        if not self.closest_germline:
-            raise ValueError("No closest germline assigned.")
 
         aligned_germline = align_ab_seqs(
             [self, self.closest_germline.numbered_seq(self.scheme)],
@@ -473,7 +471,7 @@ def number_ab_seq(
             return _process_alignment_with_germline(
                 alignment, seq, chain_annotator, vj_annotator, scheme, species
             )
-        elif isinstance(seq, list):
+        elif isinstance(seq, list) and all(isinstance(s, str) for s in seq):
             alignments: list[AntPackAlignmentType] = chain_annotator.analyze_seqs(seq)
             return [
                 _process_alignment_with_germline(
@@ -489,7 +487,7 @@ def number_ab_seq(
         if isinstance(seq, str):
             alignment: AntPackAlignmentType = chain_annotator.analyze_seq(seq)
             return _process_alignment(alignment, seq, chain_annotator, scheme)
-        elif isinstance(seq, list):
+        elif isinstance(seq, list) and all(isinstance(s, str) for s in seq):
             alignments: list[AntPackAlignmentType] = chain_annotator.analyze_seqs(seq)
             return [
                 _process_alignment(alignment, s, chain_annotator, scheme)
@@ -614,8 +612,8 @@ def _assign_closest_germline(
 
     v_gene = v_genes.split("_")[0]
     j_gene = j_genes.split("_")[0]
-    v_seq: str | None = vj_annotator.get_vj_gene_sequence(v_gene, assigned_species)
-    j_seq: str | None = vj_annotator.get_vj_gene_sequence(j_gene, assigned_species)
+    v_seq: str = vj_annotator.get_vj_gene_sequence(v_gene, assigned_species)
+    j_seq: str = vj_annotator.get_vj_gene_sequence(j_gene, assigned_species)
     return Germline(v_gene, j_gene, assigned_species, v_seq, j_seq)
 
 
@@ -740,19 +738,3 @@ def _build_alignment_indicator(seq1: str, seq2: str) -> str:
         else:
             indicator.append(".")
     return "".join(indicator)
-
-
-if __name__ == "__main__":
-    # Example usage on Pembrolizumab (5b8c), with additional His-tag on the N-terminus
-    # and GS linker on the C-terminus.
-    vh = "QVQLVQSGVEVKKPGASVKVSCKASGYTFTNYYMYWVRQAPGQGLEWMGGINPSNGGTNFNEKFKNRVTLTTDSSTTTAYMELKSLQFDDTAVYYCARRDYRFDMGFDYWGQGTTVTVSS"
-    vh_numbered = number_ab_seq(
-        "HHHHH" + vh + "GGGGS" * 3, "martin", assign_germline=True
-    )
-    print("\n#######\n# VH  #\n#######")
-    print(repr(vh_numbered))
-
-    vl = "EIVLTQSPATLSLSPGERATLSCRASKGVSTSGYSYLHWYQQKPGQAPRLLIYLASYLESGVPARFSGSGSGTDFTLTISSLEPEDFAVYYCQHSRDLPLTFGGGTKVEIKTSENLYFQ"
-    print("\n#######\n# VL  #\n#######")
-    vl_numbered = number_ab_seq("HHHHH" + vl, "martin", assign_germline=True)
-    print(repr(vl_numbered))
