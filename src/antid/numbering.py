@@ -10,7 +10,12 @@ from loguru import logger
 from antid.utils.patch_antpack import SingleChainAnnotator, VJGeneTool
 
 __all__ = ["number_ab_seq", "align_ab_seqs"]
-valid_schemes = Literal["imgt", "martin", "kabat", "aho"]
+
+# Type aliases for clarity
+ValidSchemesType = Literal["imgt", "martin", "kabat", "aho"]
+AssignedSpeciesType = Literal["human", "mouse", "alpaca", "rabbit"]
+ValidSpeciesType = AssignedSpeciesType | list[AssignedSpeciesType] | Literal["unknown"]
+AntPackAlignmentType = tuple[list[str], float, str, str]
 
 
 class NumberedAntibody:
@@ -33,7 +38,7 @@ class NumberedAntibody:
     def __init__(
         self,
         seq: str,
-        scheme: valid_schemes,
+        scheme: ValidSchemesType,
         numbering: list[str],
         percent_identity: float,
         chain_type: str,
@@ -42,7 +47,7 @@ class NumberedAntibody:
     ):
         """Initialize with the output of ``SingleChainAnnotator.analyze_seq``."""
         self.seq = seq
-        self.scheme: valid_schemes = scheme
+        self.scheme: ValidSchemesType = scheme
         self.chain_type = chain_type
         self._raw = (numbering, percent_identity, chain_type, error_message)
 
@@ -201,7 +206,7 @@ class Germline:
 
     v_gene: str
     j_gene: str
-    species: str
+    species: AssignedSpeciesType
     v_gene_seq: str | None
     j_gene_seq: str | None
 
@@ -231,7 +236,7 @@ class Germline:
             else "".join(c for c in merged_seq_aas if c != "-")
         )
 
-    def numbered_seq(self, scheme: valid_schemes = "imgt") -> NumberedAntibody:
+    def numbered_seq(self, scheme: ValidSchemesType = "imgt") -> NumberedAntibody:
         """Return the numbered germline according to the specified scheme."""
         return number_ab_seq(
             self.seq(trimmed=True), scheme, assign_germline=False, species=self.species
@@ -262,7 +267,7 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
     def __init__(
         self,
         seq: str,
-        scheme: valid_schemes,
+        scheme: ValidSchemesType,
         numbering: list[str],
         percent_identity: float,
         chain_type: str,
@@ -393,25 +398,37 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
 
 @overload
 def number_ab_seq(
-    seq: str, scheme: valid_schemes, assign_germline: Literal[False], species: str
+    seq: str,
+    scheme: ValidSchemesType,
+    assign_germline: Literal[False] = ...,
+    species: ValidSpeciesType | None = ...,
 ) -> NumberedAntibody: ...
 @overload
 def number_ab_seq(
-    seq: str, scheme: valid_schemes, assign_germline: Literal[True], species: str
+    seq: str,
+    scheme: ValidSchemesType,
+    assign_germline: Literal[True] = ...,
+    species: ValidSpeciesType | None = ...,
 ) -> NumberedAntibodyWithGermline: ...
 @overload
 def number_ab_seq(
-    seq: list[str], scheme: valid_schemes, assign_germline: Literal[False], species: str
+    seq: list[str],
+    scheme: ValidSchemesType,
+    assign_germline: Literal[False] = ...,
+    species: ValidSpeciesType | None = ...,
 ) -> list[NumberedAntibody]: ...
 @overload
 def number_ab_seq(
-    seq: list[str], scheme: valid_schemes, assign_germline: Literal[True], species: str
+    seq: list[str],
+    scheme: ValidSchemesType,
+    assign_germline: Literal[True] = ...,
+    species: ValidSpeciesType | None = ...,
 ) -> list[NumberedAntibodyWithGermline]: ...
 def number_ab_seq(
     seq: str | list[str],
-    scheme: valid_schemes,
+    scheme: ValidSchemesType,
     assign_germline: bool = False,
-    species: str = "unknown",
+    species: ValidSpeciesType | None = None,
 ):
     """Number the sequence according to IMGT numbering scheme.
 
@@ -428,16 +445,12 @@ def number_ab_seq(
     if assign_germline:
         vj_annotator = VJGeneTool(scheme=scheme)
         if isinstance(seq, str):
-            alignment: tuple[list[str], float, str, str] = chain_annotator.analyze_seq(
-                seq
-            )
+            alignment: AntPackAlignmentType = chain_annotator.analyze_seq(seq)
             return _process_alignment_with_germline(
                 alignment, seq, chain_annotator, vj_annotator, scheme, species
             )
         elif isinstance(seq, list):
-            alignments: list[tuple[list[str], float, str, str]] = (
-                chain_annotator.analyze_seqs(seq)
-            )
+            alignments: list[AntPackAlignmentType] = chain_annotator.analyze_seqs(seq)
             return [
                 _process_alignment_with_germline(
                     alignment, s, chain_annotator, vj_annotator, scheme, species
@@ -450,14 +463,10 @@ def number_ab_seq(
             )
     else:
         if isinstance(seq, str):
-            alignment: tuple[list[str], float, str, str] = chain_annotator.analyze_seq(
-                seq
-            )
+            alignment: AntPackAlignmentType = chain_annotator.analyze_seq(seq)
             return _process_alignment(alignment, seq, chain_annotator, scheme)
         elif isinstance(seq, list):
-            alignments: list[tuple[list[str], float, str, str]] = (
-                chain_annotator.analyze_seqs(seq)
-            )
+            alignments: list[AntPackAlignmentType] = chain_annotator.analyze_seqs(seq)
             return [
                 _process_alignment(alignment, s, chain_annotator, scheme)
                 for alignment, s in zip(alignments, seq, strict=True)
@@ -469,7 +478,7 @@ def number_ab_seq(
 
 
 def _assign_region_labels(
-    alignment: tuple[list[str], float, str, str], chain_annotator: SingleChainAnnotator
+    alignment: AntPackAlignmentType, chain_annotator: SingleChainAnnotator
 ) -> list[str]:
     """Assign region labels to the numbered alignment."""
     numbering, percent_identity, chain_type, err = alignment
@@ -483,10 +492,10 @@ def _assign_region_labels(
 
 
 def _process_alignment(
-    alignment: tuple[list[str], float, str, str],
+    alignment: AntPackAlignmentType,
     seq: str,
     chain_annotator: SingleChainAnnotator,
-    scheme: valid_schemes,
+    scheme: ValidSchemesType,
 ) -> NumberedAntibody:
     """Process the alignment output to extract relevant information."""
     numbering, percent_identity, chain_type, err = alignment
@@ -498,19 +507,20 @@ def _process_alignment(
 
 
 def _process_alignment_with_germline(
-    alignment: tuple[list[str], float, str, str],
+    alignment: AntPackAlignmentType,
     seq: str,
     chain_annotator: SingleChainAnnotator,
     vj_annotator: VJGeneTool,
-    scheme: valid_schemes,
-    species: str = "unknown",
+    scheme: ValidSchemesType,
+    species: ValidSpeciesType | None,
 ) -> NumberedAntibodyWithGermline:
     numbering, percent_identity, chain_type, err = alignment
     region_labels: list[str] = _assign_region_labels(alignment, chain_annotator)
 
     # Assign VJ germline genes
+    query_species = "unknown" if species is None else species
     closest_germline = _assign_closest_germline(
-        alignment, seq, region_labels, vj_annotator=vj_annotator, species=species
+        alignment, seq, region_labels, vj_annotator=vj_annotator, species=query_species
     )
     return NumberedAntibodyWithGermline(
         seq,
@@ -525,11 +535,11 @@ def _process_alignment_with_germline(
 
 
 def _assign_closest_germline(
-    alignment: tuple[list[str], float, str, str],
+    alignment: AntPackAlignmentType,
     seq: str,
     region_labels: list[str],
     vj_annotator: VJGeneTool,
-    species: str = "unknown",
+    species: ValidSpeciesType,
 ) -> Germline:
     """Assign the closest germline to the sequence.
 
@@ -713,14 +723,12 @@ if __name__ == "__main__":
     # and GS linker on the C-terminus.
     vh = "QVQLVQSGVEVKKPGASVKVSCKASGYTFTNYYMYWVRQAPGQGLEWMGGINPSNGGTNFNEKFKNRVTLTTDSSTTTAYMELKSLQFDDTAVYYCARRDYRFDMGFDYWGQGTTVTVSS"
     vh_numbered = number_ab_seq(
-        "HHHHH" + vh + "GGGGS" * 3, "martin", assign_germline=True, species="unknown"
+        "HHHHH" + vh + "GGGGS" * 3, "martin", assign_germline=True
     )
     print("\n#######\n# VH  #\n#######")
     print(repr(vh_numbered))
 
     vl = "EIVLTQSPATLSLSPGERATLSCRASKGVSTSGYSYLHWYQQKPGQAPRLLIYLASYLESGVPARFSGSGSGTDFTLTISSLEPEDFAVYYCQHSRDLPLTFGGGTKVEIKTSENLYFQ"
     print("\n#######\n# VL  #\n#######")
-    vl_numbered = number_ab_seq(
-        "HHHHH" + vl, "martin", assign_germline=True, species="unknown"
-    )
+    vl_numbered = number_ab_seq("HHHHH" + vl, "martin", assign_germline=True)
     print(repr(vl_numbered))
