@@ -1,8 +1,12 @@
 """Tests for the utils module."""
 
+import os
+import stat
+from pathlib import Path
+
 import pytest
 
-from antid.utils import check_path, command_runner, read_n_to_last_line
+from antid.utils import check_path, command_runner, find_binary, read_n_to_last_line
 
 
 # ruff: noqa: S101
@@ -52,6 +56,57 @@ def test_check_path_resolves_path(tmp_path):
     relative_path = ".."
     resolved_path = check_path(tmp_path / relative_path)
     assert resolved_path == tmp_path.parent.resolve()
+
+
+# Tests for find_binary
+def test_find_binary_found(tmp_path, monkeypatch):
+    """Test that find_binary finds an existing executable."""
+    # Use a common command that should exist on most systems
+    # Create a dummy executable to avoid system dependency
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    dummy_exe_path = bin_dir / "my_test_exe"
+    dummy_exe_path.touch()
+    dummy_exe_path.chmod(dummy_exe_path.stat().st_mode | stat.S_IEXEC)
+
+    monkeypatch.setenv("PATH", str(bin_dir), prepend=os.pathsep)
+
+    found_path = find_binary("my_test_exe")
+    assert Path(found_path).name == "my_test_exe"
+    assert Path(found_path).is_absolute()
+
+    found_path = find_binary(dummy_exe_path)
+    assert Path(found_path) == dummy_exe_path.resolve()
+
+
+def test_find_binary_not_found():
+    """Test that find_binary raises FileNotFoundError for a non-existent binary."""
+    with pytest.raises(
+        FileNotFoundError, match="Executable 'non_existent_binary' not found"
+    ):
+        find_binary("non_existent_binary")
+
+
+def test_find_binary_not_executable(tmp_path, monkeypatch):
+    """Test that find_binary raises PermissionError for a non-executable file."""
+    non_exec_file = tmp_path / "not_executable"
+    non_exec_file.touch()
+    # Ensure the file is not executable
+    non_exec_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+    monkeypatch.setenv("PATH", str(tmp_path), prepend=os.pathsep)
+
+    with pytest.raises(
+        PermissionError,
+        match=f"Executable '{non_exec_file.resolve()}' is not executable.",
+    ):
+        find_binary("not_executable")
+
+    with pytest.raises(
+        PermissionError,
+        match=f"Executable '{non_exec_file.resolve()}' is not executable.",
+    ):
+        find_binary(non_exec_file)
 
 
 # Tests for command_runner

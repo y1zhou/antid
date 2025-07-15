@@ -49,7 +49,7 @@ def find_binary(name: str | Path) -> str:
     Returns:
         The absolute path to the executable if found.
     """
-    exe = shutil.which(name)
+    exe = shutil.which(name, mode=os.F_OK)
     if exe is None:
         raise FileNotFoundError(f"Executable '{name}' not found in system PATH.")
     if not os.access(exe, os.X_OK):
