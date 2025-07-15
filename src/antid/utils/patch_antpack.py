@@ -61,6 +61,8 @@ kmer_dict = _load_nterm_kmers()
 class SingleChainAnnotator(SingleChainAnnotatorCpp):
     """Patched version of antpack.SingleChainAnnotator."""
 
-    def __init__(self, chains=["H", "K", "L"], scheme="imgt"):
+    def __init__(self, chains=None, scheme="imgt"):
         """Patched version of antpack.SingleChainAnnotator with global variables."""
+        if chains is None:
+            chains = ["H", "K", "L"]
         super().__init__(chains, scheme, consensus_path, kmer_dict)
