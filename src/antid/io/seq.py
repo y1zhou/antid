@@ -4,37 +4,7 @@ from pathlib import Path
 
 import gemmi
 
-AA3TO1 = {
-    "ASH": "A",
-    "ALA": "A",
-    "CYX": "C",
-    "CYS": "C",
-    "ASP": "D",
-    "GLU": "E",
-    "PHE": "F",
-    "GLY": "G",
-    "HIS": "H",
-    "HID": "H",
-    "HIE": "H",
-    "HIP": "H",
-    "ILE": "I",
-    "LYS": "K",
-    "LEU": "L",
-    "MET": "M",
-    "MSE": "M",
-    "ASN": "N",
-    "PYL": "O",
-    "HYP": "P",
-    "PRO": "P",
-    "GLN": "Q",
-    "ARG": "R",
-    "SER": "S",
-    "THR": "T",
-    "SEL": "U",
-    "VAL": "V",
-    "TRP": "W",
-    "TYR": "Y",
-}
+from antid.utils.constant import AA3TO1
 
 
 def struct2seq(path: str | Path, **kwargs) -> dict[str, str]:
