@@ -28,6 +28,7 @@ def cif_gz_path(data_dir: Path) -> Path:
 
 
 # ruff: noqa: S101
+@pytest.mark.slow
 def test_download_from_rcsb(tmp_path: Path, pdb_gz_path: Path, cif_gz_path: Path):
     """Test downloading PDB file from RCSB."""
     downloader = RCSBDownloader(out_dir=tmp_path)
@@ -51,6 +52,7 @@ def test_download_from_rcsb(tmp_path: Path, pdb_gz_path: Path, cif_gz_path: Path
         assert f1.read() == f2.read()
 
 
+@pytest.mark.slow
 def test_download_nonexistent_pdb(tmp_path: Path):
     """Test downloading a nonexistent PDB ID."""
     downloader = RCSBDownloader(out_dir=tmp_path, timeout=2)

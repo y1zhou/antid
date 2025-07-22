@@ -44,6 +44,8 @@ all = [{ include-group = "dev" }]
 
 [tool.pytest.ini_options]
 addopts = "--cov=src/antid --cov-branch -n auto"
+markers = ["slow: marks tests as slow (deselect with '-m \"not slow\"')"]
+
 
 [tool.coverage.run]
-omit = ["tests/*"]
+omit = ["tests/*", "src/antid/utils/constant.py"]
