@@ -6,10 +6,10 @@ from typing import Literal, overload
 import polars as pl
 from loguru import logger
 
-# from antpack import SingleChainAnnotator, VJGeneTool
+from antid.utils.constant import SIMILAR_PAIRS
 from antid.utils.patch_antpack import SingleChainAnnotator, VJGeneTool
 
-__all__ = ["number_ab_seq", "align_ab_seqs"]
+__all__ = ["number_ab_seq", "align_ab_seqs", "AntibodyAlignment"]
 
 # Type aliases for clarity
 ValidSchemesType = Literal["imgt", "martin", "kabat", "aho"]
@@ -195,6 +195,222 @@ class NumberedAntibody:
             )
 
 
+class AntibodyAlignment:
+    """A class to hold the numbered alignment of multiple antibody sequences.
+
+    Make sure all sequences are numbered with the same scheme, because the alignment
+    is only based on the first sequence's scheme.
+
+    The FR/CDR labels are also assigned based on the first sequence's chain type, so
+    it is up to the user to ensure that all sequences are heavy or light chains. It is
+    okay to mix kappa and lambda light chains.
+    """
+
+    def __init__(self, seqs: list[NumberedAntibody], seq_ids: list[str] | None = None):
+        """Initialize with the numbered sequences and their alignment."""
+        if not seqs:
+            raise ValueError("No sequences provided for alignment.")
+
+        self.scheme = seqs[0].scheme
+
+        region_labels, self.df = self.numbered2df(seqs, self.scheme, seq_ids)
+        self.numbered_pos = self.df.drop("seq_id").columns
+        self.regions = (
+            pl.DataFrame({"region": region_labels, "numbered_pos": self.numbered_pos})
+            .group_by("region", maintain_order=True)
+            .agg("numbered_pos")
+            .select(
+                "region",
+                pl.col("numbered_pos")
+                .list.first()
+                .map_elements(
+                    lambda x: self.numbered_pos.index(x), return_dtype=pl.UInt32
+                )
+                .alias("start"),
+                pl.col("numbered_pos")
+                .list.last()
+                .map_elements(
+                    lambda x: self.numbered_pos.index(x), return_dtype=pl.UInt32
+                )
+                .alias("end"),
+                "numbered_pos",
+            )
+        )
+
+    @staticmethod
+    def numbered2df(
+        seqs: list[NumberedAntibody],
+        scheme: ValidSchemesType,
+        seq_ids: list[str] | None = None,
+    ) -> tuple[list[str], pl.DataFrame]:
+        """Align antibody sequences and return a DataFrame with the results.
+
+        Args:
+            seqs: List of numbered antibody sequences.
+            scheme: The numbering scheme used ("imgt", "martin", "kabat", or "aho").
+            seq_ids: Optional list of sequence IDs. If None, will use indices as IDs.
+                The result will be sorted by these IDs.
+
+        Returns:
+            A tuple containing:
+
+            - A list of region labels (FR1-FR4, CDR1-CDR3)
+            - A DataFrame starting with a ``seq_id`` column, followed by numbered
+                positions. Each row in the DataFrame corresponds to a sequence.
+        """
+        # Align antibody sequences with build_msa
+        annotator = SingleChainAnnotator(scheme=scheme)
+        position_codes, aligned_seqs = annotator.build_msa(
+            [s.seq for s in seqs], [s._raw for s in seqs]
+        )
+        sorted_position_codes = annotator.sort_position_codes(position_codes)
+        entries = []
+
+        # Include a row showing FR/CDR regions
+        region_map = {
+            **{f"fmwk{i}": f"FR{i}" for i in range(1, 5)},
+            **{f"cdr{i}": f"CDR{i}" for i in range(1, 4)},
+        }
+        region_labels = annotator.assign_cdr_labels(position_codes, seqs[0].chain_type)
+        short_region_labels = [region_map.get(r, "-") for r in region_labels]
+
+        # Build output where each column is a numbered position in the alignment
+        if seq_ids is None:
+            seq_ids = [str(i) for i in range(len(seqs))]
+        elif len(set(seq_ids)) != len(seq_ids):
+            raise ValueError("Sequence IDs must be unique.")
+        if len(seqs) != len(seq_ids):
+            raise ValueError(
+                f"Number of sequences ({len(seqs)}) does not match number of IDs ({len(seq_ids)})."
+            )
+        for seq_id, aligned_seq in zip(seq_ids, aligned_seqs, strict=True):
+            entry = [seq_id, *(aa for aa in aligned_seq)]
+            entries.append(entry)
+
+        return short_region_labels, (
+            pl.from_records(entries, orient="row", schema=["seq_id", *position_codes])
+            .select("seq_id", *sorted_position_codes)
+            .sort("seq_id")
+        )
+
+    def format(self, highlight_cdr: bool = True, ref_seq_id: str | None = None) -> str:
+        """Format the alignment with optional CDR highlighting and germline alignment."""
+        aligned_strs = self._build_alignment_str(highlight_cdr, ref_seq_id)
+        max_seq_id_len = max(len(seq_id) for seq_id, _, _ in aligned_strs)
+        space = " " * (max_seq_id_len + 2)  # +2 for ": "
+        return "".join(
+            f"\n{space}{aln_indicator}\n{seq_id:>{max_seq_id_len}}: {seq}"
+            for seq_id, seq, aln_indicator in aligned_strs
+        )
+
+    def _build_alignment_str(
+        self, highlight_cdr: bool = True, ref_seq_id: str | None = None
+    ) -> list[tuple[str, str, str]]:
+        """Build the germline alignment string.
+
+        Args:
+            highlight_cdr: If True, format the output with CDR highlighting.
+            ref_seq_id: Optional reference sequence to align against. If None, use the
+                first sequence in the alignment.
+
+        Returns:
+            A list of tuples, each containing:
+                - The ID of the sequence.
+                - The sequence with gaps (aligned).
+                - Alignment indicators of the sequence to the reference sequence.
+
+            The reference sequence will be the first element in the list, with the
+            alignment indicators field being an empty string.
+        """
+        if ref_seq_id is None:
+            ref_seq_id: str = self.df.item(0, "seq_id")
+        elif ref_seq_id not in self.df.get_column("seq_id").to_list():
+            raise KeyError(
+                f"Reference sequence ID {ref_seq_id} not found in alignment."
+            )
+
+        # Make the alignment rows (|, ., +,  and' ')
+        seq_id_order = [ref_seq_id] + (
+            self.df.filter(pl.col("seq_id") != pl.lit(ref_seq_id))
+            .get_column("seq_id")
+            .to_list()
+        )
+        aligned_seqs = self.df.select(
+            "seq_id", pl.concat_str(self.numbered_pos).alias("seq")
+        )
+        ref_seq: str = aligned_seqs.filter(pl.col("seq_id") == pl.lit(ref_seq_id)).item(
+            0, "seq"
+        )
+        other_seqs_df = aligned_seqs.filter(
+            pl.col("seq_id") != pl.lit(ref_seq_id)
+        ).sort("seq_id")
+        other_seq_ids: list[str] = other_seqs_df.get_column("seq_id").to_list()
+        other_seqs: list[str] = other_seqs_df.get_column("seq").to_list()
+
+        aln_indicator = [
+            _build_alignment_indicator(ref_seq, other_seq) for other_seq in other_seqs
+        ]
+        if not highlight_cdr:
+            # No need to worry about coloring
+            return [(ref_seq_id, ref_seq, "")] + list(
+                zip(other_seq_ids, other_seqs, aln_indicator, strict=True)
+            )
+
+        # Highlight the CDRs
+        highlighted_seqs = (
+            self.regions.select(
+                "region",
+                "start",
+                (pl.col("end") - pl.col("start") + pl.lit(1)).alias("region_len"),
+            )
+            .with_row_index(name="index")
+            # Break down the input sequence into regions
+            .join(aligned_seqs, how="cross")
+            .with_columns(
+                pl.col("seq").str.slice(
+                    offset=pl.col("start"), length=pl.col("region_len")
+                )
+            )
+            # Highlight the CDRs
+            .with_columns(
+                pl.when(pl.col("region").str.contains(r"^CDR\d$"))
+                .then(
+                    pl.concat_str(
+                        pl.lit("\033[1;4;91m"), pl.col("seq"), pl.lit("\033[0m")
+                    )
+                )
+                .otherwise(pl.col("seq"))
+                .alias("seq"),
+            )
+            .sort("seq_id", "index")
+            .group_by("seq_id", maintain_order=True)
+            .agg(pl.col("seq"))
+            .with_columns(pl.col("seq").list.join(""))
+            .with_columns(pl.col("seq_id").cast(pl.Enum(seq_id_order)))
+            .sort("seq_id")
+            .with_columns(pl.Series("aln_indicator", [""] + aln_indicator))
+        )
+        return list(highlighted_seqs.iter_rows(named=False))
+
+    def __getitem__(self, i: str) -> dict[str, str]:
+        """Get the sequence for a specific index or numbered position."""
+        if not isinstance(i, str):
+            raise TypeError(f"Index must be a numbered position string, not {type(i)}.")
+        if i not in self.numbered_pos:
+            raise KeyError(f"Numbered position {i} not found.")
+        return {
+            r["seq_id"]: r[i]
+            for r in self.df.select("seq_id", pl.col(i)).iter_rows(named=True)
+        }
+
+
+def align_ab_seqs(
+    seqs: list[NumberedAntibody], seq_ids: list[str] | None = None
+) -> AntibodyAlignment:
+    """Align antibody sequences and return a DataFrame with the results."""
+    return AntibodyAlignment(seqs, seq_ids)
+
+
 @dataclass
 class Germline:
     """A class to hold the germline information.
@@ -290,47 +506,51 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
         self._aligned_germline = None
 
     @property
-    def aligned_germline(self) -> pl.DataFrame:
+    def aligned_germline(self) -> AntibodyAlignment:
         """Align the germline sequence to the numbered sequence."""
         if self._aligned_germline is not None:
             return self._aligned_germline
 
-        aligned_germline = align_ab_seqs(
-            [self, self.closest_germline.numbered_seq(self.scheme)],
-            include_region=True,
-        ).with_columns(
-            pl.col("seq_id").replace_strict(
-                {"region": "region", "0": "self", "1": "germline"}
-            )
-        )
-        aligned_positions = aligned_germline.drop("seq_id").columns
-        self._aligned_germline = (
-            aligned_germline.drop("seq_id")
-            .transpose()
-            .select(
-                pl.col("column_0").alias("region"),
-                pl.Series("numbered_pos", aligned_positions),
-                pl.col("column_1").alias("seq"),
-                pl.col("column_2").alias("germline"),
-            )
-            .with_row_index(name="fv_idx", offset=1)
-            .with_columns(
-                pl.when(
-                    (pl.col("seq") == pl.lit("-"))
-                    & (pl.col("region").is_in({"FR1", "FR4"}))
-                )
-                .then(pl.col("germline"))
-                .otherwise(pl.col("seq"))
-                .alias("imputed_seq")
-            )
+        self._aligned_germline = AntibodyAlignment(
+            seqs=[self, self.closest_germline.numbered_seq(self.scheme)],
+            seq_ids=["Query", "Germline"],
         )
         return self._aligned_germline
 
     @property
     def imputed_seq(self) -> str:
         """Impute gaps in the FR1/FR4 region with the closest germline."""
+        position_regions = self.aligned_germline.regions.select(
+            "region", "numbered_pos"
+        ).explode("numbered_pos")
+        aln = (
+            self.aligned_germline.df.unpivot(
+                index="seq_id", variable_name="numbered_pos", value_name="aa"
+            )
+            .join(position_regions, on="numbered_pos")
+            .pivot(
+                index=("region", "numbered_pos"),
+                on="seq_id",
+                values="aa",
+                aggregate_function=None,
+            )
+            .with_columns(
+                pl.col("numbered_pos").cast(pl.Enum(self.aligned_germline.numbered_pos))
+            )
+            .sort("numbered_pos")
+            .with_row_index(name="fv_idx", offset=1)
+            .with_columns(
+                pl.when(
+                    (pl.col("Query") == pl.lit("-"))
+                    & (pl.col("region").is_in({"FR1", "FR4"}))
+                )
+                .then(pl.col("Germline"))
+                .otherwise(pl.col("Query"))
+                .alias("imputed_seq")
+            )
+        )
         imputed_seq = "".join(
-            self.aligned_germline.filter(pl.col("imputed_seq") != pl.lit("-"))
+            aln.filter(pl.col("imputed_seq") != pl.lit("-"))
             .get_column("imputed_seq")
             .to_list()
         )
@@ -353,8 +573,8 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
                 include_non_fv=include_non_fv, highlight_cdr=highlight_cdr
             )
 
-        self_aligned, aln_indicator, germline_aligned = (
-            self._build_germline_alignment_str()
+        germline_alignment_str = self.aligned_germline.format(
+            highlight_cdr=highlight_cdr, ref_seq_id="Query"
         )
         return (
             super().format(
@@ -364,58 +584,13 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
             + f"\n\n\033[1m# Closest germline\033[0m\n\n"
             f"Species: {self.closest_germline.species} ({self.chain_type})\n"
             f"V gene: {self.closest_germline.v_gene}\n"
-            f"J gene: {self.closest_germline.j_gene}\n\n"
-            f"Input seq: {self_aligned}\n"
-            f"           {aln_indicator}\n"
-            f" Germline: {germline_aligned}"
+            f"J gene: {self.closest_germline.j_gene}"
+            f"{germline_alignment_str}"
         )
 
     def __repr__(self) -> str:
         """Return a string representation of the numbered sequence with germline."""
         return self.format(show_germline=True)
-
-    def _build_germline_alignment_str(
-        self, formatted: bool = True
-    ) -> tuple[str, str, str]:
-        """Build the germline alignment string."""
-        self_aligned = self.aligned_germline.get_column("seq").str.join("")[0]
-        germline_aligned = self.aligned_germline.get_column("germline").str.join("")[0]
-
-        aln_indicator = _build_alignment_indicator(self_aligned, germline_aligned)
-        if not formatted:
-            return self_aligned, aln_indicator, germline_aligned
-
-        # Highlight the CDRs
-        highlighted_seqs = (
-            self.aligned_germline.group_by("region", maintain_order=True)
-            .agg("seq", "germline")
-            .with_columns(
-                pl.when(pl.col("region").str.contains(r"^CDR\d$"))
-                .then(
-                    pl.concat_str(
-                        pl.lit("\033[1;4;91m"),
-                        pl.col("seq").list.join(""),
-                        pl.lit("\033[0m"),
-                    )
-                )
-                .otherwise(pl.col("seq").list.join(""))
-                .alias("seq"),
-                pl.when(pl.col("region").str.contains(r"^CDR\d$"))
-                .then(
-                    pl.concat_str(
-                        pl.lit("\033[1;4;91m"),
-                        pl.col("germline").list.join(""),
-                        pl.lit("\033[0m"),
-                    )
-                )
-                .otherwise(pl.col("germline").list.join(""))
-                .alias("germline"),
-            )
-        )
-        self_aligned = highlighted_seqs.get_column("seq").str.join("")[0]
-        germline_aligned = highlighted_seqs.get_column("germline").str.join("")[0]
-
-        return self_aligned, aln_indicator, germline_aligned
 
 
 @overload
@@ -615,111 +790,6 @@ def _assign_closest_germline(
     v_seq: str = vj_annotator.get_vj_gene_sequence(v_gene, assigned_species)
     j_seq: str = vj_annotator.get_vj_gene_sequence(j_gene, assigned_species)
     return Germline(v_gene, j_gene, assigned_species, v_seq, j_seq)
-
-
-def align_ab_seqs(
-    seqs: list[NumberedAntibody], include_region: bool = False
-) -> pl.DataFrame:
-    """Align antibody sequences and return a DataFrame with the results.
-
-    NOTE: The numbering scheme of the first item is used for alignment.
-    """
-    if not seqs:
-        raise ValueError("No sequences provided for alignment.")
-
-    # Align antibody sequences with build_msa
-    annotator = SingleChainAnnotator(scheme=seqs[0].scheme)
-    position_codes, aligned_seqs = annotator.build_msa(
-        [s.seq for s in seqs], [s._raw for s in seqs]
-    )
-    sorted_position_codes = annotator.sort_position_codes(position_codes)
-    entries = []
-
-    # Include a row showing FR/CDR regions
-    if include_region:
-        region_map = {
-            **{f"fmwk{i}": f"FR{i}" for i in range(1, 5)},
-            **{f"cdr{i}": f"CDR{i}" for i in range(1, 4)},
-        }
-        region_labels = annotator.assign_cdr_labels(position_codes, seqs[0].chain_type)
-        entries.append(["region", *(region_map.get(r, "-") for r in region_labels)])
-
-    # Build output where each column is a numbered position in the alignment
-    for seq_idx, aligned_seq in enumerate(aligned_seqs):
-        entry = [str(seq_idx), *(aa for aa in aligned_seq)]
-        entries.append(entry)
-
-    return pl.from_records(
-        entries, orient="row", schema=["seq_id", *position_codes]
-    ).select("seq_id", *sorted_position_codes)
-
-
-# Based on positive score in Blosum62
-# Credit to: https://github.com/prihoda/AbNumber/blob/2cc13f4bafcc74e0c619780aeff018d3b24be3ee/abnumber/common.py#L89
-SIMILAR_PAIRS = {
-    "AA",
-    "AS",
-    "CC",
-    "DD",
-    "DE",
-    "DN",
-    "ED",
-    "EE",
-    "EK",
-    "EQ",
-    "FF",
-    "FW",
-    "FY",
-    "GG",
-    "HH",
-    "HN",
-    "HY",
-    "II",
-    "IL",
-    "IM",
-    "IV",
-    "KE",
-    "KK",
-    "KQ",
-    "KR",
-    "LI",
-    "LL",
-    "LM",
-    "LV",
-    "MI",
-    "ML",
-    "MM",
-    "MV",
-    "ND",
-    "NH",
-    "NN",
-    "NS",
-    "PP",
-    "QE",
-    "QK",
-    "QQ",
-    "QR",
-    "RK",
-    "RQ",
-    "RR",
-    "SA",
-    "SN",
-    "SS",
-    "ST",
-    "TS",
-    "TT",
-    "VI",
-    "VL",
-    "VM",
-    "VV",
-    "WF",
-    "WW",
-    "WY",
-    "YF",
-    "YH",
-    "YW",
-    "YY",
-}
 
 
 def _build_alignment_indicator(seq1: str, seq2: str) -> str:

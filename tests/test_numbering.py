@@ -1,9 +1,9 @@
 """Tests for antibody numbering."""
 
-import polars as pl
 import pytest
 
 from antid.numbering import (
+    AntibodyAlignment,
     NumberedAntibody,
     NumberedAntibodyWithGermline,
     _build_alignment_indicator,
@@ -148,10 +148,9 @@ def test_numbered_antibody_with_germline_properties(vl_germline_imgt):
     """Test properties of the NumberedAntibodyWithGermline class."""
     assert vl_germline_imgt.closest_germline.v_gene is not None
     assert vl_germline_imgt.closest_germline.j_gene is not None
-    aligned_df = vl_germline_imgt.aligned_germline
-    assert isinstance(aligned_df, pl.DataFrame)
-    assert "germline" in aligned_df.columns
-    assert "imputed_seq" in aligned_df.columns
+    aln = vl_germline_imgt.aligned_germline
+    assert isinstance(aln, AntibodyAlignment)
+    assert aln.df.get_column("seq_id").to_list() == ["Germline", "Query"]
 
 
 def test_format_methods(vh_martin):
@@ -195,21 +194,42 @@ def test_align_ab_seqs(vh_martin):
     vh_variant_numbered = number_ab_seq(vh_variant_seq, "martin", assign_germline=True)
 
     seqs_to_align = [vh_martin, vh_variant_numbered]
+    seq_ids = ["Query", "Variant"]
+    alignment = align_ab_seqs(seqs=seqs_to_align, seq_ids=seq_ids)
+    assert alignment.df.height == 2
+    assert alignment.df.get_column("seq_id").to_list() == seq_ids
+    assert alignment["31"] == {"Query": vh_martin["31"], "Variant": "-"}
 
-    alignment = align_ab_seqs(seqs_to_align)
-    assert isinstance(alignment, pl.DataFrame)
-    assert alignment.height == 2
-    assert "1" in alignment.columns  # Check for a numbered position
-    assert alignment.filter(pl.col("seq_id") == pl.lit("1")).select("31").item() == "-"
+    # Test getter methods
+    with pytest.raises(
+        TypeError, match=r"Index must be a numbered position string, not <class 'int'>"
+    ):
+        _ = alignment[31]  # type: ignore
+    with pytest.raises(KeyError, match=r"Numbered position 999 not found"):
+        _ = alignment["999"]
 
-    alignment_with_region = align_ab_seqs(seqs_to_align, include_region=True)
-    assert alignment_with_region.height == 3
-    assert (
-        alignment_with_region.filter(pl.col("seq_id") == pl.lit("region"))
-        .select("31")
-        .item()
-        == "CDR1"
-    )
+    # Test rearranging alignment strings
+    aln_fmt = alignment.format(highlight_cdr=False)
+    assert aln_fmt.strip().startswith("Query: ")
+    aln_refmt = alignment.format(highlight_cdr=False, ref_seq_id="Variant")
+    assert aln_refmt.strip().startswith("Variant: ")
+    with pytest.raises(
+        KeyError, match=r"Reference sequence ID XX not found in alignment"
+    ):
+        alignment.format(highlight_cdr=False, ref_seq_id="XX")
+
+    # Test alignment without seq_ids
+    alignment_wo_ids = align_ab_seqs(seqs=seqs_to_align)
+    assert alignment_wo_ids.df.get_column("seq_id").to_list() == ["0", "1"]
+
+    # Test alignment with wrong seq_ids
+    with pytest.raises(ValueError, match=r"Sequence IDs must be unique"):
+        align_ab_seqs(seqs=seqs_to_align, seq_ids=["Query", "Query"])
+    with pytest.raises(
+        ValueError,
+        match=r"Number of sequences \(2\) does not match number of IDs \(3\)",
+    ):
+        align_ab_seqs(seqs=seqs_to_align, seq_ids=["Query", "Variant", "Extra"])
 
 
 def test_align_ab_seqs_empty_list():
