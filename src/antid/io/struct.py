@@ -7,6 +7,7 @@ import gemmi
 import polars as pl
 import requests
 from loguru import logger
+from tqdm import tqdm
 
 from antid.utils import check_path
 
@@ -42,6 +43,7 @@ class RCSBDownloader:
         Returns:
             Path to the downloaded file.
         """
+        pdb_id = pdb_id.upper()
         gz_pdb_file = self.out_dir / f"{pdb_id}.pdb.gz"
         if gz_pdb_file.exists():
             return gz_pdb_file
@@ -67,6 +69,7 @@ class RCSBDownloader:
         Returns:
             Path to the downloaded file.
         """
+        pdb_id = pdb_id.upper()
         gz_cif_file = self.out_dir / f"{pdb_id}-assembly1.cif.gz"
         if gz_cif_file.exists():
             return gz_cif_file
@@ -77,6 +80,52 @@ class RCSBDownloader:
         with open(gz_cif_file, "wb") as f:
             f.write(r.content)
         return gz_cif_file
+
+    def fetch_fasta(self, pdb_id: str) -> Path:
+        """Download the FASTA file for a given PDB ID.
+
+        Args:
+            pdb_id: The PDB ID.
+
+        Returns:
+            Path to the downloaded FASTA file.
+        """
+        pdb_id = pdb_id.upper()
+        fasta_file = self.out_dir / f"{pdb_id}.fasta"
+        if fasta_file.exists():
+            return fasta_file
+
+        fasta_url = f"https://www.rcsb.org/fasta/entry/{pdb_id}/download"
+        r = self.session.get(fasta_url, timeout=self.timeout)
+        r.raise_for_status()
+        with open(fasta_file, "wb") as f:
+            f.write(r.content)
+        return fasta_file
+
+    def fetch_all_fasta(self) -> Path:
+        """Download FASTA file containing sequences for all PDB entries."""
+        out_path = self.out_dir / "pdb_seqres.txt.gz"
+        if out_path.exists():
+            return out_path
+
+        fasta_url = "https://files.wwpdb.org/pub/pdb/derived_data/pdb_seqres.txt.gz"
+        r = self.session.get(fasta_url, stream=True)
+        total_size = int(r.headers.get("Content-Length", 0))
+        block_size = 1024  # 1 KB
+        with (
+            open(out_path, "wb") as f,
+            tqdm(
+                total=total_size, unit="B", unit_scale=True, desc="Downloading FASTA"
+            ) as bar,
+        ):
+            for chunk in r.iter_content(chunk_size=block_size):
+                f.write(chunk)
+                bar.update(len(chunk))
+
+        if total_size != 0 and bar.n != total_size:
+            raise RuntimeError("Downloaded file size does not match expected size.")
+
+        return out_path
 
 
 def struct2df(path: str | Path) -> pl.DataFrame:
