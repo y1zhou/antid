@@ -4,6 +4,7 @@ from pathlib import Path
 
 import gemmi
 
+from antid.utils import check_path
 from antid.utils.constant import AA3TO1, NONSTD_RESIDUES
 
 
@@ -46,12 +47,22 @@ def struct2seq(
     return all_res
 
 
-def fasta2seq(fasta_path: Path) -> dict[str, str]:
+def fasta2seq(fasta_file: str | Path) -> dict[str, str]:
     """Convert a FASTA file to a dictionary of sequences."""
+    import gzip
+
     from Bio import SeqIO
 
+    fasta_path = check_path(fasta_file, exists=True)
     res: dict[str, str] = {}
-    for record in SeqIO.parse(fasta_path, "fasta"):
-        res[record.description] = str(record.seq)
+    if fasta_path.suffix == ".gz":
+        with gzip.open(fasta_path, "rt") as f:
+            records = SeqIO.parse(f, "fasta")
+            for record in records:
+                res[record.description] = str(record.seq)
+    else:
+        records = SeqIO.parse(fasta_path, "fasta")
+        for record in records:
+            res[record.description] = str(record.seq)
 
     return res
