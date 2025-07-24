@@ -4,10 +4,12 @@ from pathlib import Path
 
 import gemmi
 
-from antid.utils.constant import AA3TO1
+from antid.utils.constant import AA3TO1, NONSTD_RESIDUES
 
 
-def struct2seq(path: str | Path, **kwargs) -> dict[str, str]:
+def struct2seq(
+    path: str | Path, substitute_non_standard: bool = False, **kwargs
+) -> dict[str, str]:
     """Convert a PDB or mmCIF file to a dictionary of sequences.
 
     The dictionary keys are chain IDs and the values are sequences.
@@ -23,6 +25,8 @@ def struct2seq(path: str | Path, **kwargs) -> dict[str, str]:
         path: Path to the PDB or mmCIF structure file. The file format is
             automatically detected from the content, and works for both
             text and gzipped files.
+        substitute_non_standard: If True, non-standard residues will be substituted and included.
+            Note that this has lower priority than any additional mappings provided.
         **kwargs: Additional mappings for residue names (3-letter to 1-letter).
 
     Returns:
@@ -34,6 +38,8 @@ def struct2seq(path: str | Path, **kwargs) -> dict[str, str]:
     # Get all residues
     all_res = {}
     aa_map = AA3TO1.copy() | kwargs
+    if substitute_non_standard:
+        aa_map |= {k: AA3TO1[v] for k, v in NONSTD_RESIDUES.items() if k not in aa_map}
     for chain in st[0]:
         all_res[chain.name] = "".join(aa_map.get(res.name, "") for res in chain)
 
