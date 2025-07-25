@@ -34,20 +34,20 @@ def test_download_from_rcsb(tmp_path: Path, pdb_gz_path: Path, cif_gz_path: Path
     downloader = RCSBDownloader(out_dir=tmp_path)
     pdb_path = downloader.fetch_pdb("5b8c", fallback_to_cif=False)
     assert pdb_path.exists()
-    assert pdb_path.name == "5b8c.pdb.gz"
+    assert pdb_path.name == "5B8C.pdb.gz"
 
     # Check if the file is equivalent to the fixture
     with open(pdb_gz_path, "rb") as f1, open(pdb_path, "rb") as f2:
         assert f1.read() == f2.read()
 
     # Redownloading should be quick and return the same file directly
-    pdb_path2 = downloader.fetch_pdb("5b8c", fallback_to_cif=False)
+    pdb_path2 = downloader.fetch_pdb("5B8C", fallback_to_cif=False)
     assert pdb_path2 == pdb_path
 
     # Similar tests for mmCIF
     cif_path = downloader.fetch_mmcif("5b8c")
     assert cif_path.exists()
-    assert cif_path.name == "5b8c-assembly1.cif.gz"
+    assert cif_path.name == "5B8C-assembly1.cif.gz"
     with open(cif_gz_path, "rb") as f1, open(cif_path, "rb") as f2:
         assert f1.read() == f2.read()
 
@@ -66,7 +66,7 @@ def test_download_nonexistent_pdb(tmp_path: Path):
     # For new structures with no PDB files available, falling back would work
     cif_path = downloader.fetch_pdb("9kas", fallback_to_cif=True)
     assert cif_path.exists()
-    assert cif_path.name == "9kas-assembly1.cif.gz"
+    assert cif_path.name == "9KAS-assembly1.cif.gz"
 
 
 def _test_pembro_shapes(df: pl.DataFrame):
