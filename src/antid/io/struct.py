@@ -232,20 +232,21 @@ def gemmi_convert(
     """
     from antid.utils import check_path, command_runner
 
-    struct_path1 = check_path(struct_file2, mkdir=True)
-    if struct_path1.exists():
-        return struct_path1
+    struct_path2 = check_path(struct_file2, mkdir=True)
+    if struct_path2.exists():
+        logger.info(f"Output file {struct_path2} already exists, skipping conversion.")
+        return struct_path2
 
-    struct_path2 = check_path(struct_file1, exists=True)
+    struct_path1 = check_path(struct_file1, exists=True)
     _ = command_runner(
         cmd=[
             "gemmi",
             "convert",
             *additional_gemmi_args,
-            str(struct_path2),
             str(struct_path1),
+            str(struct_path2),
         ],
-        cwd=struct_path1.parent,
+        cwd=struct_path2.parent,
         log_file="/dev/null",
     )
-    return struct_path1
+    return struct_path2
