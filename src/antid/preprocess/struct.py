@@ -6,7 +6,7 @@ import gemmi
 import polars as pl
 
 from antid.io.seq import AA3TO1
-from antid.utils import check_path
+from antid.utils import check_path, command_runner
 
 
 def align_ref_seq_to_struct(
@@ -117,3 +117,146 @@ def align_ref_seq_to_struct(
         insertion_code_col_name,
         resn_col_name,
     )
+
+
+def standardize_struct_file(
+    input_file: str | Path,
+    output_file: str | Path,
+    restart_each_chain: bool = True,
+    chain_mapping: dict[str, str] | None = None,
+) -> pl.DataFrame:
+    """Renumber PDB and mmCIF coordinate files with serial residue indices.
+
+    WARNING: Only the first model in ``input_file`` will be kept in the output.
+
+    NOTE: This somewhat overlaps with the ``run_rosetta_clean_script`` fuction.
+
+    Args:
+        input_file: Path to the input PDB file.
+        output_file: Path to the output PDB file.
+        restart_each_chain: If True, residue indices will restart from 1 for each chain.
+            If False, residue indices will be continuous across the entire structure.
+        chain_mapping: Optional mapping of old chain IDs to new chain IDs. If provided,
+            the chain IDs in the output PDB file will be replaced according to this mapping.
+            The output file will also *only* contain the chains in the mapping. If not
+            provided, all chains in the input file will be kept, and only residue
+            renumbering will be performed.
+
+    Returns:
+        A polars DataFrame with:
+            - model: The model number.
+            - old_chain: The original chain ID.
+            - old_resi: The original residue index.
+            - old_insertion: The original insertion code.
+            - new_chain: The new chain ID after renumbering.
+            - new_resi: The new residue index after renumbering.
+            - new_insertion: The new insertion code after renumbering.
+    """
+    input_path = check_path(input_file, exists=True)
+    output_path = check_path(output_file, mkdir=True)
+
+    # Read structure file and remove unnecessary stuff
+    st = gemmi.read_structure(str(input_path), format=gemmi.CoorFormat.Detect)
+    st.setup_entities()
+    st.remove_alternative_conformations()
+    st.standardize_crystal_frame()
+
+    # Rename chains if a mapping is provided
+    model = st[0]
+    if chain_mapping is not None:
+        model_chains = chain_mapping.copy()
+    else:
+        model_chains: dict[str, str] = {c.name: c.name for c in model}
+    for old_chain_id, new_chain_id in model_chains.items():
+        st.rename_chain(old_chain_id, new_chain_id)
+
+    model_chains_rev = {v: k for k, v in model_chains.items()}
+
+    # Go through the structure and renumber residues
+    res_map: list[tuple[int, str, int, str, str, int, str]] = []
+    prev_resi = 0
+
+    for chain in model:
+        if chain.name not in model_chains_rev:
+            model.remove_chain(chain.name)
+            continue
+
+        old_chain_id = model_chains_rev[chain.name]
+        resi = 1 if restart_each_chain else prev_resi + 1
+        for res in chain:
+            res.seqid.num = resi
+            res.seqid.icode = " "
+            resi += 1
+            res_map.append(
+                (
+                    model.num,
+                    old_chain_id,
+                    res.seqid.num,
+                    res.seqid.icode,
+                    chain.name,
+                    res.seqid.num,
+                    " ",
+                )
+            )
+        prev_resi = resi
+
+    st.remove_empty_chains()
+    st.assign_serial_numbers(numbered_ter=True)
+
+    # Write the renumbered structure to a new file
+    if output_path.suffix == ".pdb":
+        st.write_pdb(str(output_path))
+    elif output_path.suffix == ".cif":
+        st.make_mmcif_document().write_file(str(output_path))
+    else:
+        raise ValueError(
+            f"Unsupported output file format: {output_path.suffix}. "
+            "Only .pdb and .cif files are supported."
+        )
+
+    return pl.from_records(
+        res_map,
+        orient="row",
+        schema=(
+            ("model", pl.Int32),
+            ("old_chain", pl.Utf8),
+            ("old_resi", pl.Int32),
+            ("old_insertion", pl.Utf8),
+            ("new_chain", pl.Utf8),
+            ("new_resi", pl.Int32),
+            ("new_insertion", pl.Utf8),
+        ),
+    )
+
+
+def run_rosetta_clean_script(
+    pdb_file: str | Path,
+    out_dir: str | Path,
+    keep_chains: str,
+    rosetta_clean_pdb_script: str | Path,
+):
+    """Renumber residues and remove unused chains in PDB.
+
+    For more details, see:
+    https://docs.rosettacommons.org/docs/latest/rosetta_basics/preparation/preparing-structures#cleaning-pdbs-for-rosetta
+
+    Args:
+        pdb_file: Path to the input PDB file.
+        out_dir: Directory to save the output PDB file.
+        keep_chains: Chain IDs to keep in the output PDB file. All will be transformed to
+            uppercase. For example, "abc" will keep chains A, B, and C in the output PDB file.
+            The order of the chains is not guaranteed.
+        rosetta_clean_pdb_script: Path to $ROSETTA/tools/protein_tools/scripts/clean_pdb.py.
+
+    """
+    input_pdb_path = check_path(pdb_file, exists=True)
+    script_path = check_path(rosetta_clean_pdb_script, exists=True)
+    out_dir_path = check_path(out_dir, mkdir=True)
+    out_pdb_path = out_dir_path / f"{input_pdb_path.stem}_{keep_chains}.pdb"
+    if out_pdb_path.exists():
+        return out_pdb_path
+
+    cmd = [str(script_path), str(input_pdb_path), keep_chains]
+    _ = command_runner(cmd, cwd=out_dir_path, log_file=out_dir_path / "clean_pdb.log")
+
+    return out_pdb_path
