@@ -1,6 +1,8 @@
 """Test cases for antid.io.struct utilities using pytest fixtures and PDB/mmCIF files."""
 
+import gzip
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import polars as pl
 import pytest
@@ -103,6 +105,60 @@ def test_download_fasta(tmp_path: Path, fasta_path: Path):
     # Redownloading should return the same file directly
     fasta_path2 = downloader.fetch_fasta("1MKV")
     assert fasta_path2 == fasta_path
+
+
+def test_fetch_all_fasta_success(tmp_path: Path):
+    """Test successful download of the FASTA file."""
+    downloader = RCSBDownloader(out_dir=tmp_path)
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    fasta_content = b">P1;5B8C\nQVQLVQSGVEVKKPGASVKVSCKASGYTFTNYYMYWVRQAPGQGLEWMGGINPSNGGTNFNEKFKNRVTLTTDSSTTTAYMELKSLQFDDTAVYYCARRDYRFDMGFDYWGQGTTVTVSS\n"
+    gzipped_content = gzip.compress(fasta_content)
+    mock_response.headers = {"Content-Length": str(len(gzipped_content))}
+    mock_response.iter_content.return_value = [gzipped_content]
+    mock_response.content = gzipped_content
+
+    with patch("requests.Session.get", return_value=mock_response) as mock_get:
+        out_path = downloader.fetch_all_fasta()
+        mock_get.assert_called_once_with(
+            "https://files.wwpdb.org/pub/pdb/derived_data/pdb_seqres.txt.gz",
+            stream=True,
+        )
+        assert out_path == tmp_path / "pdb_seqres.txt.gz"
+        assert out_path.exists()
+        with gzip.open(out_path, "rb") as f:
+            assert f.read() == fasta_content
+
+
+def test_fetch_all_fasta_already_exists(tmp_path: Path):
+    """Test when the FASTA file already exists."""
+    downloader = RCSBDownloader(out_dir=tmp_path)
+    out_path = tmp_path / "pdb_seqres.txt.gz"
+    out_path.touch()
+
+    with patch("requests.Session.get") as mock_get:
+        result_path = downloader.fetch_all_fasta()
+        mock_get.assert_not_called()
+        assert result_path == out_path
+
+
+def test_fetch_all_fasta_download_error(tmp_path: Path):
+    """Test for a runtime error if downloaded file size does not match."""
+    downloader = RCSBDownloader(out_dir=tmp_path)
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    fasta_content = b">P1;5B8C\nSEQUENCE"
+    gzipped_content = gzip.compress(fasta_content)
+    mock_response.headers = {
+        "Content-Length": str(len(gzipped_content) + 10)
+    }  # Mismatch
+    mock_response.iter_content.return_value = [gzipped_content]
+
+    with patch("requests.Session.get", return_value=mock_response):
+        with pytest.raises(
+            RuntimeError, match="Downloaded file size does not match expected size."
+        ):
+            downloader.fetch_all_fasta()
 
 
 def _test_pembro_shapes(df: pl.DataFrame):
