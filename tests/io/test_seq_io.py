@@ -36,6 +36,19 @@ def test_struct2seq(data_dir):
     assert mmcif_seqs == seqs
 
 
+def test_struct2seq_with_noncanonical_aa(data_dir):
+    """Test struct2seq with non-canonical amino acids."""
+    seqs = struct2seq(data_dir / "1MFV.pdb.gz", substitute_non_standard=True)
+    assert len(seqs) == 4
+    assert seqs["A"][0] == "E"  # PCA -> E
+    assert seqs["B"] == seqs["C"] == seqs["D"] == ""
+
+    # Test overriding the default mapping for PCA
+    seqs = struct2seq(data_dir / "1MFV.pdb.gz", PCA="Q")
+    assert len(seqs) == 4
+    assert seqs["A"][0] == "Q"  # PCA -> Q
+
+
 def test_struct2seq_with_custom_mappings(data_dir):
     """Test struct2seq with custom residue mappings."""
     seqs = struct2seq(data_dir / "5b8c.pdb1.gz", HOH="o")
@@ -67,3 +80,11 @@ def test_fasta2seq(data_dir):
         "5B8C_3|Chains C, F, I, L|Programmed cell death protein 1|Homo sapiens (9606)": "GSWNPPTFSPALLVVTEGDNATFTCSFSNTSESFVLNWYRMSPSNQTDKLAAFPEDRSQPGQDSRFRVTQLPNGRDFHMSVVRARRNDSGTYLCGAISLAPKAQIKESLRAELRVTERRAEVPTAHPSPSPTSENLYFQ",
         "5B8C_1|Chains A, D, G, J|Pembrolizumab light chain variable region (PemVL)|Homo sapiens (9606)": "EIVLTQSPATLSLSPGERATLSCRASKGVSTSGYSYLHWYQQKPGQAPRLLIYLASYLESGVPARFSGSGSGTDFTLTISSLEPEDFAVYYCQHSRDLPLTFGGGTKVEIKTSENLYFQ",
     }
+
+
+def test_fasta2seq_gzipped(data_dir):
+    """Test reading a gzipped FASTA file."""
+    fasta_path = data_dir / "1MFV.fasta"
+    seqs = fasta2seq(fasta_path)
+    gz_seqs = fasta2seq(fasta_path.with_suffix(".fasta.gz"))
+    assert seqs == gz_seqs
