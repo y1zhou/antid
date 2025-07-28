@@ -109,10 +109,10 @@ def _test_pembro_shapes(df: pl.DataFrame):
     """Helper function to check shapes of DataFrame."""
     assert len(df.columns) == 15
     assert df.height == 2764
-    assert df.n_unique("atom_idx") == 2764
-    assert set(df.get_column("chain_id").unique().to_list()) == {"A", "B", "C"}
+    assert df.n_unique("atomi") == 2764
+    assert set(df.get_column("chain").unique().to_list()) == {"A", "B", "C"}
     num_residues = df.filter(pl.col("resn") != pl.lit("HOH")).n_unique(
-        ("chain_id", "resi", "insertion_code")
+        ("chain", "resi", "insertion")
     )
     assert num_residues == 347
 

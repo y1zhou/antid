@@ -10,6 +10,7 @@ from loguru import logger
 from tqdm import tqdm
 
 from antid.utils import check_path
+from antid.utils.constant import ARPEGGIA_IDX_COLS
 
 
 class RCSBDownloader:
@@ -144,10 +145,10 @@ def struct2df(path: str | Path) -> pl.DataFrame:
             cra.residue.name,
             cra.residue.seqid.num,
             cra.residue.seqid.icode,
+            cra.atom.altloc,
             cra.atom.name,
             cra.atom.serial,
             cra.atom.element.name,
-            cra.atom.altloc,
             cra.atom.occ,
             cra.atom.b_iso,
             cra.atom.charge,
@@ -162,14 +163,8 @@ def struct2df(path: str | Path) -> pl.DataFrame:
         orient="row",
         schema=(
             "model",
-            "chain_id",
-            "resn",
-            "resi",
-            "insertion_code",
-            "atom_name",
-            "atom_idx",
+            *ARPEGGIA_IDX_COLS,
             "element",
-            "altloc",
             "occupancy",
             "bfactor",
             "charge",
@@ -191,15 +186,15 @@ def df2pdb(df: pl.DataFrame, out_path: str | Path) -> None:
         out_path: Output path for the structure file.
     """
     pdb_atom_rows: list[str] = []
-    prev_chain: str = df.item(0, "chain_id")
+    prev_chain: str = df.item(0, "chain")
     for r in df.iter_rows(named=True):
-        if r["chain_id"] != prev_chain:
+        if r["chain"] != prev_chain:
             pdb_atom_rows.append("TER\n")
-            prev_chain = r["chain_id"]
+            prev_chain = r["chain"]
 
         pdb_atom_rows.append(
-            f"ATOM  {r['atom_idx']:>5} {r['atom_name']:<4} {r['resn']:>3} "
-            f"{r['chain_id']:<1}{r['resi']:>4}{r['insertion_code']:<1}   "
+            f"ATOM  {r['atomi']:>5} {r['atomn']:<4} {r['resn']:>3} "
+            f"{r['chain']:<1}{r['resi']:>4}{r['insertion']:<1}   "
             f"{r['x']:>8.3f}{r['y']:>8.3f}{r['z']:>8.3f} "
             f"{r['occupancy']:>6.2f}{r['bfactor']:>6.2f}          "
             f"{r['element']:<2}\n"

@@ -3638,3 +3638,5 @@ SIMILAR_PAIRS = {
     "YW",
     "YY",
 }
+
+ARPEGGIA_IDX_COLS = ("chain", "resn", "resi", "insertion", "altloc", "atomn", "atomi")

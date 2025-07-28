@@ -1,17 +1,21 @@
 """Utility functions for dealing with PDB structure files."""
 
+from pathlib import Path
+
+import gemmi
 import polars as pl
 
 from antid.io.seq import AA3TO1
+from antid.utils import check_path
 
 
 def align_ref_seq_to_struct(
     ref_seq: str,
     pdb_seqs_df: pl.DataFrame,
     pdb_chain: str,
-    chain_col_name: str = "chain_id",
+    chain_col_name: str = "chain",
     resi_col_name: str = "resi",
-    insertion_code_col_name: str = "insertion_code",
+    insertion_code_col_name: str = "insertion",
     resn_col_name: str = "resn",
     ref_idx_col_name: str = "ref_idx",
     resn_3to1: bool = False,
@@ -41,7 +45,8 @@ def align_ref_seq_to_struct(
             - chain_col_name: The chain ID.
             - ref_idx_col_name: The index in the reference sequence.
             - resi_col_name: The residue index (with insertion codes) in the PDB file.
-            - resn_col_name: The residue name in the PDB file.
+            - insertion_code_col_name: The insertion code in the PDB file.
+            - resn_col_name: The residue name represented as a one-letter code.
 
     """
     pdb_seqs_df_dedup = pdb_seqs_df.unique(
@@ -107,7 +112,7 @@ def align_ref_seq_to_struct(
         map_entries.append(map_entry)
     return pl.from_records(map_entries, orient="row", infer_schema_length=None).select(
         pl.lit(pdb_chain).alias(chain_col_name),
-        pl.col(ref_idx_col_name).cast(pl.Utf8),
+        pl.col(ref_idx_col_name).cast(pl.Int64),
         resi_col_name,
         insertion_code_col_name,
         resn_col_name,

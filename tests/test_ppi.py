@@ -17,6 +17,7 @@ from antid.ppi.scan import (
     get_contacts,
 )
 from antid.utils import find_binary
+from antid.utils.constant import ARPEGGIA_IDX_COLS
 
 
 @pytest.fixture(scope="module")
@@ -31,12 +32,6 @@ def arpeggia_bin() -> str:
     # Set $ARPEGGIA_PATH to your binary
     arpeggia_path = os.environ.get("ARPEGGIA_PATH", "arpeggia")
     return find_binary(arpeggia_path)
-
-
-@pytest.fixture(scope="module")
-def arpeggia_idx_cols():
-    """Fixture to provide the column names for Arpeggia atom indices."""
-    return ("chain", "resn", "resi", "insertion", "altloc", "atomn", "atomi")
 
 
 @pytest.fixture(scope="module")
@@ -56,7 +51,6 @@ def test_run_arpeggia_contacts_and_sasa(
     tmp_path: Path,
     data_dir: Path,
     arpeggia_bin: str,
-    arpeggia_idx_cols: tuple[str, ...],
     arpeggia_contact_cols: tuple[str, ...],
 ):
     """Test running Arpeggia for contacts and SASA calculations."""
@@ -79,7 +73,7 @@ def test_run_arpeggia_contacts_and_sasa(
         contact_df_cols = contacts.columns
         for col in arpeggia_contact_cols:
             assert col in contact_df_cols
-        for col in arpeggia_idx_cols:
+        for col in ARPEGGIA_IDX_COLS:
             assert f"from_{col}" in contact_df_cols
             assert f"to_{col}" in contact_df_cols
 
@@ -90,7 +84,7 @@ def test_run_arpeggia_contacts_and_sasa(
         assert isinstance(sasa, pl.DataFrame)
         assert sasa.height > 0
         assert "sasa" in sasa.columns
-        for col in arpeggia_idx_cols:
+        for col in ARPEGGIA_IDX_COLS:
             assert col in sasa.columns
 
         # Test cache: should read from file, not rerun
@@ -136,7 +130,6 @@ def test_collect_ab_ag_contacts_and_within_ab(
     pembro_contacts: pl.DataFrame,
     pembro_sasa: pl.DataFrame,
     arpeggia_contact_cols: tuple[str, ...],
-    arpeggia_idx_cols: tuple[str, ...],
 ):
     """Test collecting antibody-antigen and within-antibody contacts."""
     ab_chains = {"A", "B"}  # VL and VH chains for 5b8c
@@ -145,7 +138,7 @@ def test_collect_ab_ag_contacts_and_within_ab(
     assert ab_ag_df.height > 0
     for col in arpeggia_contact_cols:
         assert col in ab_ag_df.columns
-    for col in arpeggia_idx_cols:
+    for col in ARPEGGIA_IDX_COLS:
         assert f"ab_{col}" in ab_ag_df.columns
         assert f"ag_{col}" in ab_ag_df.columns
 
@@ -157,7 +150,7 @@ def test_collect_ab_ag_contacts_and_within_ab(
     assert within_ab_df.height > 0
     for col in arpeggia_contact_cols:
         assert col in within_ab_df.columns
-    for col in arpeggia_idx_cols:
+    for col in ARPEGGIA_IDX_COLS:
         assert f"from_{col}" in within_ab_df.columns
         assert f"to_{col}" in within_ab_df.columns
 

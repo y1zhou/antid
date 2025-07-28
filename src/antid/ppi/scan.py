@@ -10,6 +10,7 @@ from pathlib import Path
 import polars as pl
 
 from antid.utils import check_path, command_runner, find_binary
+from antid.utils.constant import ARPEGGIA_IDX_COLS
 
 
 def get_contacts(
@@ -100,16 +101,6 @@ def collect_ab_ag_contacts(
     Returns:
         A DataFrame with headers changed to `ab_*` and `ag_*` groups.
     """
-    arpeggia_id_cols = (
-        "chain",
-        "resn",
-        "resi",
-        "insertion",
-        "altloc",
-        "atomn",
-        "atomi",
-    )
-
     # TODO: deal with multiple models
     first_model_id = contact_df.item(0, "model")
     return (
@@ -124,18 +115,18 @@ def collect_ab_ag_contacts(
             .then(pl.col(f"from_{c}"))
             .otherwise(pl.col(f"to_{c}"))
             .alias(f"ab_{c}")
-            for c in arpeggia_id_cols
+            for c in ARPEGGIA_IDX_COLS
         )
         .with_columns(
             pl.when(pl.col("from_chain").is_in(ab_chains))
             .then(pl.col(f"to_{c}"))
             .otherwise(pl.col(f"from_{c}"))
             .alias(f"ag_{c}")
-            for c in arpeggia_id_cols
+            for c in ARPEGGIA_IDX_COLS
         )
         .drop(
-            *(f"from_{c}" for c in arpeggia_id_cols),
-            *(f"to_{c}" for c in arpeggia_id_cols),
+            *(f"from_{c}" for c in ARPEGGIA_IDX_COLS),
+            *(f"to_{c}" for c in ARPEGGIA_IDX_COLS),
         )
         # Add atom SASA for antibody and antigen chains
         .join(
