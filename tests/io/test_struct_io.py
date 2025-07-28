@@ -27,6 +27,12 @@ def cif_gz_path(data_dir: Path) -> Path:
     return data_dir / "5b8c-assembly1.cif.gz"
 
 
+@pytest.fixture(scope="module")
+def fasta_path(data_dir: Path) -> Path:
+    """Fixture to provide the FASTA file path."""
+    return data_dir / "1MFV.fasta"
+
+
 # ruff: noqa: S101
 @pytest.mark.slow
 def test_download_pdb_from_rcsb(tmp_path: Path, pdb_gz_path: Path):
@@ -83,6 +89,22 @@ def test_download_pdb_fallback_to_cif(tmp_path: Path):
     assert cif_path.name == "9KAS-assembly1.cif.gz"
 
 
+@pytest.mark.slow
+def test_download_fasta(tmp_path: Path, fasta_path: Path):
+    """Test downloading a FASTA file."""
+    downloader = RCSBDownloader(out_dir=tmp_path)
+    fasta_path = downloader.fetch_fasta("1mkv")
+    assert fasta_path.exists()
+    assert fasta_path.name == "1MKV.fasta"
+
+    with open(fasta_path, "rb") as f1, open(fasta_path, "rb") as f2:
+        assert f1.read() == f2.read()
+
+    # Redownloading should return the same file directly
+    fasta_path2 = downloader.fetch_fasta("1MKV")
+    assert fasta_path2 == fasta_path
+
+
 def _test_pembro_shapes(df: pl.DataFrame):
     """Helper function to check shapes of DataFrame."""
     assert len(df.columns) == 15
@@ -133,3 +155,7 @@ def test_gemmi_convert(pdb_gz_path: Path, tmp_path):
     assert result2.suffix == ".pdb"
     df = struct2df(out_pdb)
     _test_pembro_shapes(df)
+
+    # Running the conversion again should skip if the output exists
+    result3 = gemmi_convert(out_cif, out_pdb)
+    assert result3 == result2
