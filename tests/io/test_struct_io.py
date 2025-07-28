@@ -29,7 +29,7 @@ def cif_gz_path(data_dir: Path) -> Path:
 
 # ruff: noqa: S101
 @pytest.mark.slow
-def test_download_from_rcsb(tmp_path: Path, pdb_gz_path: Path, cif_gz_path: Path):
+def test_download_pdb_from_rcsb(tmp_path: Path, pdb_gz_path: Path):
     """Test downloading PDB file from RCSB."""
     downloader = RCSBDownloader(out_dir=tmp_path)
     pdb_path = downloader.fetch_pdb("5b8c", fallback_to_cif=False)
@@ -44,12 +44,21 @@ def test_download_from_rcsb(tmp_path: Path, pdb_gz_path: Path, cif_gz_path: Path
     pdb_path2 = downloader.fetch_pdb("5B8C", fallback_to_cif=False)
     assert pdb_path2 == pdb_path
 
+
+@pytest.mark.slow
+def test_download_cif_from_rcsb(tmp_path: Path, cif_gz_path: Path):
+    """Test downloading PDB file from RCSB."""
+    downloader = RCSBDownloader(out_dir=tmp_path)
+
     # Similar tests for mmCIF
     cif_path = downloader.fetch_mmcif("5b8c")
     assert cif_path.exists()
     assert cif_path.name == "5B8C-assembly1.cif.gz"
     with open(cif_gz_path, "rb") as f1, open(cif_path, "rb") as f2:
         assert f1.read() == f2.read()
+
+    cif_path2 = downloader.fetch_mmcif("5B8C")
+    assert cif_path2 == cif_path
 
 
 @pytest.mark.slow
@@ -63,6 +72,11 @@ def test_download_nonexistent_pdb(tmp_path: Path):
     with pytest.raises(requests.HTTPError):
         downloader.fetch_pdb("XXXX", fallback_to_cif=True)
 
+
+@pytest.mark.slow
+def test_download_pdb_fallback_to_cif(tmp_path: Path):
+    """Test downloading a PDB ID that does not have a PDB file but has an mmCIF file."""
+    downloader = RCSBDownloader(out_dir=tmp_path)
     # For new structures with no PDB files available, falling back would work
     cif_path = downloader.fetch_pdb("9kas", fallback_to_cif=True)
     assert cif_path.exists()
