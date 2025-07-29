@@ -18,6 +18,7 @@ def align_ref_seq_to_struct(
     insertion_code_col_name: str = "insertion",
     resn_col_name: str = "resn",
     ref_idx_col_name: str = "ref_idx",
+    ref_resn_col_name: str = "ref_resn",
     resn_3to1: bool = False,
     **kwargs,
 ) -> pl.DataFrame:
@@ -27,6 +28,10 @@ def align_ref_seq_to_struct(
     in a PDB file. When there are large gaps, the quality of the alignment
     is not guaranteed.
 
+    The sequence extracted from the PDB file is assumed to be a subset of the
+    reference sequence. If there are extra residues in the PDB file that are not
+    in the reference sequence, results may not be as expected.
+
     Args:
         ref_seq: The reference sequence, which should be >= len(pdb_seq).
         pdb_seqs_df: The PDB DataFrame from `antid.io.struct.struct2df`.
@@ -34,19 +39,23 @@ def align_ref_seq_to_struct(
         chain_col_name: The name of the column containing chain IDs.
         resi_col_name: The name of the column containing residue indices.
         insertion_code_col_name: The name of the column containing insertion codes.
-        resn_col_name: The name of the column containing residue names. Make sure the
-            residue names are in 1-letter format. If `resn_3to1` is True, they will be converted.
+        resn_col_name: The name of the column containing residue names from the PDB.
+            Make sure the residue names are in 1-letter format.
+            If `resn_3to1` is True, they will be converted.
         ref_idx_col_name: The name of the column to use for the reference index in the returned DataFrame.
+        ref_resn_col_name: The name of the column containing residue names from
+            the reference sequence.
         resn_3to1: Whether to convert 3-letter residue names to 1-letter names.
         **kwargs: Additional 3->1 residue mappings.
 
     Returns:
         A DataFrame with the aligned sequences containing columns:
             - chain_col_name: The chain ID.
-            - ref_idx_col_name: The index in the reference sequence.
+            - ref_idx_col_name: The index in the reference sequence (1-based).
             - resi_col_name: The residue index (with insertion codes) in the PDB file.
             - insertion_code_col_name: The insertion code in the PDB file.
             - resn_col_name: The residue name represented as a one-letter code.
+            - ref_resn_col_name: The residue name from the reference sequence.
 
     """
     pdb_seqs_df_dedup = pdb_seqs_df.unique(
@@ -82,6 +91,7 @@ def align_ref_seq_to_struct(
                 resi_col_name,
                 insertion_code_col_name,
                 resn_col_name,
+                pl.col(resn_col_name).alias(ref_resn_col_name),
             )
         )
 
@@ -104,9 +114,18 @@ def align_ref_seq_to_struct(
                 f"Reference sequence should not have gaps:\nRef: {ref_aln}\nPDB: {pdb_aln}"
             )
 
-        map_entry = {ref_idx_col_name: i + 1, resi_col_name: None, resn_col_name: aa1}
+        map_entry = {
+            ref_idx_col_name: i + 1,
+            resi_col_name: None,
+            insertion_code_col_name: None,
+            resn_col_name: aa2,
+            ref_resn_col_name: aa1,
+        }
         if aa2 != "-":
             map_entry[resi_col_name] = chain_resi.item(resi_idx, resi_col_name)
+            map_entry[insertion_code_col_name] = chain_resi.item(
+                resi_idx, insertion_code_col_name
+            )
             resi_idx += 1
 
         map_entries.append(map_entry)
@@ -116,6 +135,7 @@ def align_ref_seq_to_struct(
         resi_col_name,
         insertion_code_col_name,
         resn_col_name,
+        ref_resn_col_name,
     )
 
 
