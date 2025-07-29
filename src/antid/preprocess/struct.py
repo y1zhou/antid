@@ -183,10 +183,14 @@ def standardize_struct_file(
 
     # Rename chains if a mapping is provided
     model = st[0]
+    all_chains = {c.name for c in model}
     if chain_mapping is not None:
         model_chains = chain_mapping.copy()
+        for c in model_chains.keys():
+            if c not in all_chains:
+                raise ValueError(f"Chain {c} not found in {all_chains}: {input_file}")
     else:
-        model_chains: dict[str, str] = {c.name: c.name for c in model}
+        model_chains: dict[str, str] = {c: c for c in all_chains}
     for old_chain_id, new_chain_id in model_chains.items():
         st.rename_chain(old_chain_id, new_chain_id)
 
@@ -197,6 +201,7 @@ def standardize_struct_file(
     prev_resi = 0
 
     for chain in model:
+        # TODO: generate residue IDs using antibody numbering
         if chain.name not in model_chains_rev:
             model.remove_chain(chain.name)
             continue
@@ -204,9 +209,6 @@ def standardize_struct_file(
         old_chain_id = model_chains_rev[chain.name]
         resi = 1 if restart_each_chain else prev_resi + 1
         for res in chain:
-            res.seqid.num = resi
-            res.seqid.icode = " "
-            resi += 1
             res_map.append(
                 (
                     model.num,
@@ -214,10 +216,14 @@ def standardize_struct_file(
                     res.seqid.num,
                     res.seqid.icode,
                     chain.name,
-                    res.seqid.num,
+                    resi,
                     " ",
                 )
             )
+            res.seqid.num = resi
+            res.seqid.icode = " "
+            resi += 1
+
         prev_resi = resi
 
     st.remove_empty_chains()
