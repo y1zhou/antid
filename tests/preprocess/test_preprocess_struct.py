@@ -83,6 +83,17 @@ def test_align_ref_seq_to_struct_wrong_ref(pembro_df, pembro_seqs):
         )
 
 
+def test_align_ref_seq_to_struct_wrong_resn(pembro_df, pembro_seqs):
+    """Test alignment when the resn column contains 3-letter codes."""
+    vh_seq = pembro_seqs["A"]
+
+    with pytest.raises(
+        ValueError,
+        match="Residue names in the PDB DataFrame should all be 1-letter codes",
+    ):
+        align_ref_seq_to_struct(ref_seq=vh_seq, pdb_seqs_df=pembro_df, pdb_chain="A")
+
+
 def test_standardize_struct_file_renum_pdb(tmp_path, data_dir):
     """Test renumbering of PDB files."""
     # 5b8c is serial in the two antibody chains, but in the antigen chain

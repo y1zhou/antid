@@ -70,6 +70,17 @@ def align_ref_seq_to_struct(
             pl.col(resn_col_name).replace_strict(aa_map)
         )
 
+    if (
+        pdb_seqs_df_dedup.filter(
+            pl.col(resn_col_name).str.len_bytes() > pl.lit(1)
+        ).height
+        != 0
+    ):
+        raise ValueError(
+            "Residue names in the PDB DataFrame should all be 1-letter codes. "
+            "You may want to set `resn_3to1=True`."
+        )
+
     # Collect the current sequence in the PDB file
     pdb_seqs = (
         pdb_seqs_df_dedup.group_by(pl.col(chain_col_name), maintain_order=True)
