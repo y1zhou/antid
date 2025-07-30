@@ -29,7 +29,7 @@ class RCSBDownloader:
             req_session: Optional requests.Session object.
             timeout: Timeout for requests in seconds.
         """
-        self.out_dir = check_path(out_dir, mkdir=True, ignore_dots=True)
+        self.out_dir = check_path(out_dir, mkdir=True, is_dir=True)
         self.session = requests.Session() if req_session is None else req_session
         self.timeout = timeout
 

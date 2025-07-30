@@ -35,12 +35,12 @@ def test_check_path_creates_parent_dir(tmp_path):
 def test_check_path_ignore_dots(tmp_path):
     """Test that check_path ignores paths with dots."""
     dot_path = tmp_path / "dir.to.create"
-    check_path(dot_path, mkdir=True, ignore_dots=True)
+    check_path(dot_path, mkdir=True, is_dir=True)
     assert dot_path.is_dir()
     assert dot_path.exists()
 
     dot_path_with_file = tmp_path / "another.dir.to.create" / "file.txt"
-    check_path(dot_path_with_file, mkdir=True, ignore_dots=False)
+    check_path(dot_path_with_file, mkdir=True, is_dir=False)
     assert dot_path_with_file.parent.is_dir()
     assert dot_path_with_file.parent.exists()
 

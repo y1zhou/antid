@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def check_path(
-    p: str | Path, mkdir: bool = False, exists: bool = False, ignore_dots: bool = False
+    p: str | Path, mkdir: bool = False, exists: bool = False, is_dir: bool = False
 ) -> Path:
     """Canonical way of dealing with file paths.
 
@@ -19,7 +19,7 @@ def check_path(
             directory is created at ``p`` if it doesn't have a suffix, and at
             its parent if it does have a suffix.
         exists: raise an error if ``p`` does not exist.
-        ignore_dots: if True, ignore periods in the path when making directories.
+        is_dir: if True, the path would be treated as a directory instead of a file.
             For example, ``/foo.bar`` will create the directory with the
             name ``foo.bar`` instead of treating it as a file.
 
@@ -32,7 +32,7 @@ def check_path(
             raise FileNotFoundError(filepath)
     if mkdir:
         # When the file path doesn't exist
-        if filepath.suffix and not ignore_dots:
+        if filepath.suffix and not is_dir:
             filepath.parent.mkdir(parents=True, exist_ok=True)
         else:
             filepath.mkdir(parents=True, exist_ok=True)

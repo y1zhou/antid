@@ -29,7 +29,7 @@ def get_contacts(
         out_file_name: Name of the output file (without extension).
         chain_pairs: Chain pairs to calculate contacts for, in the format "A,B/C".
     """
-    out_path = check_path(out_dir, mkdir=True, ignore_dots=True)
+    out_path = check_path(out_dir, mkdir=True, is_dir=True)
     out_file = out_path / f"{out_file_name}.parquet"
     if out_file.exists():
         return pl.read_parquet(out_file)
@@ -63,7 +63,7 @@ def get_atomic_sasa(
     out_file_name: str = "sasa",
 ):
     """Run Arpeggia to calculate solvent accessible surface area (SASA) for a structure."""
-    out_path = check_path(out_dir, mkdir=True, ignore_dots=True)
+    out_path = check_path(out_dir, mkdir=True, is_dir=True)
     out_file = out_path / f"{out_file_name}.parquet"
     if out_file.exists():
         return pl.read_parquet(out_file)
