@@ -17,7 +17,7 @@ keywords = [
 
 dependencies = [
   # antpack>0.3.9 is non-commercial only
-  "antpack==0.3.8.5",
+  "antpack>=0.3.8.5,<0.3.9",
   "biopython>=1.85",
   "gemmi>=0.7.1,<0.8.0",
   "gemmi-program>=0.7.1,<0.8.0",
