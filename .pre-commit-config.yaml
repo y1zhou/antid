@@ -3,7 +3,7 @@ default_language_version:
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       # list of supported hooks: https://pre-commit.com/hooks.html
       - id: trailing-whitespace
@@ -20,10 +20,10 @@ repos:
 
   # python code formatting
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: "v0.12.1"
+    rev: "v0.12.9"
     hooks:
       - id: ruff-format
-      - id: ruff
+      - id: ruff-check
         args:
           [
             "--select",
@@ -38,15 +38,14 @@ repos:
         types_or: [python, pyi, jupyter]
 
   # yaml formatting
-  # - repo: https://github.com/rbubley/mirrors-prettier
-  #   rev: v3.3.3
+  # - repo: https://github.com/google/yamlfmt
+  #   rev: v0.17.
   #   hooks:
-  #     - id: prettier
-  #       types: [yaml]
+  #     - id: yamlfmt
 
   # shell scripts linter
   - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.9.0.6
+    rev: v0.11.0.1
     hooks:
       - id: shellcheck
 

@@ -196,3 +196,8 @@ cython_debug/
 # GitHub CoPilot
 .github/prompts
 .github/copilot-instructions.md
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+pixi.lock
+uv.lock
