@@ -6,7 +6,7 @@ import gemmi
 import polars as pl
 
 from antid.io.seq import AA3TO1
-from antid.utils import check_path, command_runner
+from antid.utils import check_path
 
 
 def align_ref_seq_to_struct(
@@ -160,7 +160,9 @@ def standardize_struct_file(
 
     WARNING: Only the first model in ``input_file`` will be kept in the output.
 
-    NOTE: This somewhat overlaps with the ``run_rosetta_clean_script`` fuction.
+    NOTE: This somewhat similar to $ROSETTA/tools/protein_tools/scripts/clean_pdb.py.
+    For details, see:
+    https://docs.rosettacommons.org/docs/latest/rosetta_basics/preparation/preparing-structures#cleaning-pdbs-for-rosetta
 
     Args:
         input_file: Path to the input PDB file.
@@ -266,34 +268,37 @@ def standardize_struct_file(
     )
 
 
-def run_rosetta_clean_script(
-    pdb_file: str | Path,
-    out_dir: str | Path,
-    keep_chains: str,
-    rosetta_clean_pdb_script: str | Path,
+def run_pdbfixer(
+    pdb_file: str | Path, out_pdb_file: str | Path, add_hydrogens: bool = False
 ):
-    """Renumber residues and remove unused chains in PDB.
-
-    For more details, see:
-    https://docs.rosettacommons.org/docs/latest/rosetta_basics/preparation/preparing-structures#cleaning-pdbs-for-rosetta
-
-    Args:
-        pdb_file: Path to the input PDB file.
-        out_dir: Directory to save the output PDB file.
-        keep_chains: Chain IDs to keep in the output PDB file. All will be transformed to
-            uppercase. For example, "abc" will keep chains A, B, and C in the output PDB file.
-            The order of the chains is not guaranteed.
-        rosetta_clean_pdb_script: Path to $ROSETTA/tools/protein_tools/scripts/clean_pdb.py.
-
-    """
-    input_pdb_path = check_path(pdb_file, exists=True)
-    script_path = check_path(rosetta_clean_pdb_script, exists=True)
-    out_dir_path = check_path(out_dir, mkdir=True)
-    out_pdb_path = out_dir_path / f"{input_pdb_path.stem}_{keep_chains}.pdb"
+    """Run PDBFixer to fix PDB files."""
+    out_pdb_path = check_path(out_pdb_file, mkdir=True, is_dir=False)
     if out_pdb_path.exists():
         return out_pdb_path
 
-    cmd = [str(script_path), str(input_pdb_path), keep_chains]
-    _ = command_runner(cmd, cwd=out_dir_path, log_file=out_dir_path / "clean_pdb.log")
+    from openmm.app import PDBFile
+    from pdbfixer import PDBFixer
+
+    input_pdb_path = check_path(pdb_file, exists=True)
+    fixer = PDBFixer(filename=str(input_pdb_path))
+    fixer.findNonstandardResidues()
+    fixer.replaceNonstandardResidues()
+    fixer.findMissingResidues()
+    fixer.findMissingAtoms()
+    for k, v in {
+        "residues": fixer.missingResidues,
+        "atoms": fixer.missingAtoms,
+        "terminals": fixer.missingTerminals,
+    }.items():
+        if v:
+            print(f"Missing {k} in {input_pdb_path}: {v}")
+
+    if add_hydrogens:
+        fixer.addMissingHydrogens()
+
+    with open(out_pdb_path, "w") as f:
+        if fixer.source is not None:
+            f.write(f"REMARK   1 PDBFIXER FROM: {fixer.source}\n")
+        PDBFile.writeFile(fixer.topology, fixer.positions, f, keepIds=True)
 
     return out_pdb_path
