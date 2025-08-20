@@ -6,7 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from antid.utils import check_path, command_runner, find_binary, read_n_to_last_line
+from antid.utils import (
+    check_path,
+    chunks,
+    command_runner,
+    find_binary,
+    read_n_to_last_line,
+)
 
 
 # ruff: noqa: S101
@@ -164,3 +170,16 @@ def test_read_n_to_last_line_return_bytes(tmp_path):
         f.write("line 1\n")
 
     assert read_n_to_last_line(file_path, n=1, decode=False) == b"line 1\n"
+
+
+# Test for helper chunking function
+def test_chunking_iterable():
+    """Test chunking of an iterable."""
+    res = list(chunks([1, 2, 3, 4, 5], 2))
+    assert res == [[1, 2], [3, 4], [5]]
+
+    res = list(chunks("abcdefg", 3))
+    assert res == [["a", "b", "c"], ["d", "e", "f"], ["g"]]
+
+    res = list(chunks([], 2))
+    assert res == []

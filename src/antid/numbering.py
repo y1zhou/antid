@@ -138,9 +138,9 @@ class NumberedAntibody:
 
             # Gray out non-Fv regions
             if n_term_seq:
-                n_term_seq = f"\033[2m{n_term_seq}\033[0m"
+                n_term_seq = f"\033[2;9;30m{n_term_seq}\033[0m"
             if c_term_seq:
-                c_term_seq = f"\033[2m{c_term_seq}\033[0m"
+                c_term_seq = f"\033[2;9;30m{c_term_seq}\033[0m"
         else:
             n_term_seq, c_term_seq = "", ""
 
@@ -271,7 +271,9 @@ class AntibodyAlignment:
             **{f"fmwk{i}": f"FR{i}" for i in range(1, 5)},
             **{f"cdr{i}": f"CDR{i}" for i in range(1, 4)},
         }
-        region_labels = annotator.assign_cdr_labels(position_codes, seqs[0].chain_type)
+        region_labels = annotator.assign_cdr_labels(
+            sorted_position_codes, seqs[0].chain_type
+        )
         short_region_labels = [region_map.get(r, "-") for r in region_labels]
 
         # Build output where each column is a numbered position in the alignment

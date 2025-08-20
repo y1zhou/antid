@@ -161,24 +161,24 @@ def test_format_methods(vh_martin):
     assert "Closest germline" in repr_str
     assert "V gene" in repr_str
     assert "\033[1;4;91m" in repr_str  # Check for highlighting
-    assert "\033[2m" in repr_str
+    assert "\033[2;9;30m" in repr_str
 
     # Test format without germline
     format_no_germline = numbered.format(show_germline=False)
     assert "Closest germline" not in format_no_germline
     assert "\033[1;4;91m" in format_no_germline
-    assert "\033[2m" in format_no_germline
+    assert "\033[2;9;30m" in format_no_germline
 
     # Test format without CDR highlighting
     format_no_highlight = numbered.format(show_germline=False, highlight_cdr=False)
     assert "\033[1;4;91m" not in format_no_highlight
-    assert "\033[2m" in format_no_highlight
+    assert "\033[2;9;30m" in format_no_highlight
 
     # Test hiding non-Fv regions
     format_hide_non_fv = numbered.format(show_germline=False, include_non_fv=False)
     assert "HHHHH" not in format_hide_non_fv
     assert "\033[1;4;91m" in format_hide_non_fv
-    assert "\033[2m" not in format_hide_non_fv
+    assert "\033[2;9;30m" not in format_hide_non_fv
     assert format_hide_non_fv == repr(vh_martin)
 
     # Test germline format

@@ -3,8 +3,20 @@
 import os
 import shutil
 import subprocess as sp
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypeVar
+
+T = TypeVar("T")
+
+__all__ = [
+    "check_path",
+    "chunks",
+    "command_runner",
+    "find_binary",
+    "read_n_to_last_line",
+]
 
 
 def check_path(
@@ -120,3 +132,10 @@ def read_n_to_last_line(filename, n=1, decode: bool = True) -> str | bytes:
         return last_line.decode()
     else:
         return last_line
+
+
+def chunks[T](lst: Iterable[T], n: int) -> Iterable[list[T]]:
+    """Yield successive n-sized chunks from lst."""
+    lst = list(lst)  # Convert to list to allow len() and slicing
+    for i in range(0, len(lst), n):
+        yield lst[i : i + n]
