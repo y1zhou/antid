@@ -131,7 +131,7 @@ def test_command_runner_logs_output(tmp_path):
 # Tests for command_runner with verbose output to stdout
 def test_command_runner_verbose_output(tmp_path, capsys):
     """Test that command_runner logs command output to a file."""
-    log_file = "/dev/null"
+    log_file = os.devnull
     command = ["echo", "hello world"]
     command_runner(
         command, cwd=tmp_path, log_file=log_file, verbose=True, track_metadata=False

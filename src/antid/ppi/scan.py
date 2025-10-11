@@ -5,6 +5,7 @@ For more information, see: https://github.com/y1zhou/arpeggia
 TODO: add PyO3 bindings for Arpeggia
 """
 
+import os
 from pathlib import Path
 
 import polars as pl
@@ -52,7 +53,7 @@ def get_contacts(
         "-g",
         chain_pairs,
     ]
-    command_runner(cmd, out_dir, log_file="/dev/null")
+    command_runner(cmd, out_dir, log_file=os.devnull)
     return pl.read_parquet(out_file)
 
 
@@ -84,7 +85,7 @@ def get_atomic_sasa(
         "-n",
         out_file_name,
     ]
-    command_runner(cmd, out_dir, log_file="/dev/null")
+    command_runner(cmd, out_dir, log_file=os.devnull)
     return pl.read_parquet(out_file)
 
 

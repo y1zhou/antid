@@ -1,5 +1,6 @@
 """Utility functions for dealing with structure files."""
 
+import os
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -242,6 +243,6 @@ def gemmi_convert(
             str(struct_path2),
         ],
         cwd=struct_path2.parent,
-        log_file="/dev/null",
+        log_file=os.devnull,
     )
     return struct_path2
