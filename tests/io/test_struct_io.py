@@ -1,6 +1,7 @@
 """Test cases for antid.io.struct utilities using pytest fixtures and PDB/mmCIF files."""
 
 import gzip
+import shutil
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -9,6 +10,7 @@ import pytest
 import requests
 
 from antid.io.struct import RCSBDownloader, df2pdb, gemmi_convert, struct2df
+from antid.utils import check_path
 
 
 @pytest.fixture(scope="module")
@@ -51,6 +53,13 @@ def test_download_pdb_from_rcsb(tmp_path: Path, pdb_gz_path: Path):
     # Redownloading should be quick and return the same file directly
     pdb_path2 = downloader.fetch_pdb("5B8C", fallback_to_cif=False)
     assert pdb_path2 == pdb_path
+
+    # Subdirectories should use the middle letters of the PDB ID
+    downloader_subdir = RCSBDownloader(out_dir=tmp_path, make_subdir=True)
+    sub_outdir = check_path(tmp_path / "B8", mkdir=True, is_dir=True)
+    shutil.copyfile(pdb_path, sub_outdir / pdb_path.name)  # Pre-create the file
+    pdb_path3 = downloader_subdir.fetch_pdb("5B8C", fallback_to_cif=False)
+    assert pdb_path3 == sub_outdir / "5B8C.pdb.gz"
 
 
 @pytest.mark.slow

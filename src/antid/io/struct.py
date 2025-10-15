@@ -20,6 +20,7 @@ class RCSBDownloader:
     def __init__(
         self,
         out_dir: str | Path,
+        make_subdir: bool = False,
         req_session: requests.Session | None = None,
         timeout: int = 10,
     ):
@@ -27,10 +28,14 @@ class RCSBDownloader:
 
         Args:
             out_dir: Directory to save downloaded files.
+            make_subdir: If True, always use the two characters in the middle of the PDB
+                ID as subdirectory names. This is useful when downloading a large number
+                of PDB files to avoid too many files in a single directory.
             req_session: Optional requests.Session object.
             timeout: Timeout for requests in seconds.
         """
         self.out_dir = check_path(out_dir, mkdir=True, is_dir=True)
+        self.subdir = make_subdir
         self.session = requests.Session() if req_session is None else req_session
         self.timeout = timeout
 
@@ -46,7 +51,12 @@ class RCSBDownloader:
             Path to the downloaded file.
         """
         pdb_id = pdb_id.upper()
-        gz_pdb_file = self.out_dir / f"{pdb_id}.pdb.gz"
+        out_dir = (
+            check_path(self.out_dir / pdb_id[-3:-1], mkdir=True, is_dir=True)
+            if self.subdir
+            else self.out_dir
+        )
+        gz_pdb_file = out_dir / f"{pdb_id}.pdb.gz"
         if gz_pdb_file.exists():
             return gz_pdb_file
 
@@ -72,7 +82,12 @@ class RCSBDownloader:
             Path to the downloaded file.
         """
         pdb_id = pdb_id.upper()
-        gz_cif_file = self.out_dir / f"{pdb_id}-assembly1.cif.gz"
+        out_dir = (
+            check_path(self.out_dir / pdb_id[-3:-1], mkdir=True, is_dir=True)
+            if self.subdir
+            else self.out_dir
+        )
+        gz_cif_file = out_dir / f"{pdb_id}-assembly1.cif.gz"
         if gz_cif_file.exists():
             return gz_cif_file
 
@@ -93,7 +108,12 @@ class RCSBDownloader:
             Path to the downloaded FASTA file.
         """
         pdb_id = pdb_id.upper()
-        fasta_file = self.out_dir / f"{pdb_id}.fasta"
+        out_dir = (
+            check_path(self.out_dir / pdb_id[-3:-1], mkdir=True, is_dir=True)
+            if self.subdir
+            else self.out_dir
+        )
+        fasta_file = out_dir / f"{pdb_id}.fasta"
         if fasta_file.exists():
             return fasta_file
 
@@ -104,10 +124,10 @@ class RCSBDownloader:
             f.write(r.content)
         return fasta_file
 
-    def fetch_all_fasta(self) -> Path:
+    def fetch_all_fasta(self, force: bool = False) -> Path:
         """Download FASTA file containing sequences for all PDB entries."""
         out_path = self.out_dir / "pdb_seqres.txt.gz"
-        if out_path.exists():
+        if out_path.exists() and not force:
             return out_path
 
         fasta_url = "https://files.wwpdb.org/pub/pdb/derived_data/pdb_seqres.txt.gz"
