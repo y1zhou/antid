@@ -39,11 +39,14 @@ class RCSBDownloader:
         self.session = requests.Session() if req_session is None else req_session
         self.timeout = timeout
 
-    def fetch_pdb(self, pdb_id: str, fallback_to_cif: bool = True) -> Path:
-        """Download the first biological assembly PDB file from RCSB.
+    def fetch_pdb(
+        self, pdb_id: str, file_type: str = "bio", fallback_to_cif: bool = True
+    ) -> Path:
+        """Download a PDB file from RCSB.
 
         Args:
             pdb_id: The PDB ID.
+            file_type: Bio-assembly1 (bio) or asymmetric unit (asu).
             fallback_to_cif: If True, fall back to downloading the mmCIF file if the PDB
             file is not found. For details, see https://www.rcsb.org/docs/general-help/structures-without-legacy-pdb-format-files
 
@@ -51,16 +54,23 @@ class RCSBDownloader:
             Path to the downloaded file.
         """
         pdb_id = pdb_id.upper()
+        file_type = self._check_file_type(file_type)
         out_dir = (
-            check_path(self.out_dir / pdb_id[-3:-1], mkdir=True, is_dir=True)
+            check_path(
+                self.out_dir / file_type / pdb_id[-3:-1], mkdir=True, is_dir=True
+            )
             if self.subdir
-            else self.out_dir
+            else check_path(self.out_dir / file_type, mkdir=True, is_dir=True)
         )
         gz_pdb_file = out_dir / f"{pdb_id}.pdb.gz"
         if gz_pdb_file.exists():
             return gz_pdb_file
 
-        pdb_url = f"https://files.rcsb.org/download/{pdb_id}.pdb1.gz"
+        pdb_url = (
+            f"https://files.rcsb.org/download/{pdb_id}.pdb1.gz"
+            if file_type == "bio"
+            else f"https://files.rcsb.org/download/{pdb_id}.pdb.gz"
+        )
         r = self.session.get(pdb_url, timeout=self.timeout)
         if r.status_code == 404 and fallback_to_cif:
             # Try mmCIF file if the PDB is nonexistent
@@ -72,31 +82,50 @@ class RCSBDownloader:
             f.write(r.content)
         return gz_pdb_file
 
-    def fetch_mmcif(self, pdb_id: str) -> Path:
-        """Download the first biological assembly mmCIF file from RCSB.
+    def fetch_mmcif(self, pdb_id: str, file_type: str = "bio") -> Path:
+        """Download a mmCIF file from RCSB.
 
         Args:
             pdb_id: The PDB ID.
+            file_type: Bio-assembly1 (bio) or asymmetric unit (asu).
 
         Returns:
             Path to the downloaded file.
         """
         pdb_id = pdb_id.upper()
+        file_type = self._check_file_type(file_type)
         out_dir = (
-            check_path(self.out_dir / pdb_id[-3:-1], mkdir=True, is_dir=True)
+            check_path(
+                self.out_dir / file_type / pdb_id[-3:-1], mkdir=True, is_dir=True
+            )
             if self.subdir
-            else self.out_dir
+            else check_path(self.out_dir / file_type, mkdir=True, is_dir=True)
         )
-        gz_cif_file = out_dir / f"{pdb_id}-assembly1.cif.gz"
+        gz_cif_file = out_dir / f"{pdb_id}.cif.gz"
         if gz_cif_file.exists():
             return gz_cif_file
 
-        cif_url = f"https://files.rcsb.org/download/{pdb_id}-assembly1.cif.gz"
+        cif_url = (
+            f"https://files.rcsb.org/download/{pdb_id}-assembly1.cif.gz"
+            if file_type == "bio"
+            else f"https://files.rcsb.org/download/{pdb_id}.cif.gz"
+        )
         r = self.session.get(cif_url, timeout=self.timeout)
         r.raise_for_status()
         with open(gz_cif_file, "wb") as f:
             f.write(r.content)
         return gz_cif_file
+
+    @staticmethod
+    def _check_file_type(file_type: str) -> str:
+        """Check if the file type is valid."""
+        match file_type.lower():
+            case "bio" | "biological" | "biological_assembly" | "biological-assembly":
+                return "bio"
+            case "asu" | "asymmetric" | "asymmetric_unit" | "asymmetric-unit":
+                return "asu"
+            case _:
+                raise ValueError(f"Invalid file type: {file_type}")
 
     def fetch_fasta(self, pdb_id: str) -> Path:
         """Download the FASTA file for a given PDB ID.
@@ -109,9 +138,9 @@ class RCSBDownloader:
         """
         pdb_id = pdb_id.upper()
         out_dir = (
-            check_path(self.out_dir / pdb_id[-3:-1], mkdir=True, is_dir=True)
+            check_path(self.out_dir / "fasta" / pdb_id[-3:-1], mkdir=True, is_dir=True)
             if self.subdir
-            else self.out_dir
+            else check_path(self.out_dir / "fasta", mkdir=True, is_dir=True)
         )
         fasta_file = out_dir / f"{pdb_id}.fasta"
         if fasta_file.exists():

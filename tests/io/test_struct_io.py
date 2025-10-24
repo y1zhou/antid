@@ -42,7 +42,7 @@ def fasta_path(data_dir: Path) -> Path:
 def test_download_pdb_from_rcsb(tmp_path: Path, pdb_gz_path: Path):
     """Test downloading PDB file from RCSB."""
     downloader = RCSBDownloader(out_dir=tmp_path)
-    pdb_path = downloader.fetch_pdb("5b8c", fallback_to_cif=False)
+    pdb_path = downloader.fetch_pdb("5b8c", file_type="bio", fallback_to_cif=False)
     assert pdb_path.exists()
     assert pdb_path.name == "5B8C.pdb.gz"
 
@@ -56,7 +56,7 @@ def test_download_pdb_from_rcsb(tmp_path: Path, pdb_gz_path: Path):
 
     # Subdirectories should use the middle letters of the PDB ID
     downloader_subdir = RCSBDownloader(out_dir=tmp_path, make_subdir=True)
-    sub_outdir = check_path(tmp_path / "B8", mkdir=True, is_dir=True)
+    sub_outdir = check_path(tmp_path / "bio" / "B8", mkdir=True, is_dir=True)
     shutil.copyfile(pdb_path, sub_outdir / pdb_path.name)  # Pre-create the file
     pdb_path3 = downloader_subdir.fetch_pdb("5B8C", fallback_to_cif=False)
     assert pdb_path3 == sub_outdir / "5B8C.pdb.gz"
@@ -70,7 +70,7 @@ def test_download_cif_from_rcsb(tmp_path: Path, cif_gz_path: Path):
     # Similar tests for mmCIF
     cif_path = downloader.fetch_mmcif("5b8c")
     assert cif_path.exists()
-    assert cif_path.name == "5B8C-assembly1.cif.gz"
+    assert cif_path.name == "5B8C.cif.gz"
     with open(cif_gz_path, "rb") as f1, open(cif_path, "rb") as f2:
         assert f1.read() == f2.read()
 
@@ -95,9 +95,9 @@ def test_download_pdb_fallback_to_cif(tmp_path: Path):
     """Test downloading a PDB ID that does not have a PDB file but has an mmCIF file."""
     downloader = RCSBDownloader(out_dir=tmp_path)
     # For new structures with no PDB files available, falling back would work
-    cif_path = downloader.fetch_pdb("9kas", fallback_to_cif=True)
+    cif_path = downloader.fetch_pdb("9kas", file_type="bio", fallback_to_cif=True)
     assert cif_path.exists()
-    assert cif_path.name == "9KAS-assembly1.cif.gz"
+    assert cif_path.name == "9KAS.cif.gz"
 
 
 @pytest.mark.slow
