@@ -37,6 +37,18 @@ def fasta_path(data_dir: Path) -> Path:
     return data_dir / "1MFV.fasta"
 
 
+@pytest.fixture(scope="module")
+def asu_cif_gz_path(data_dir: Path) -> Path:
+    """Fixture to provide gzipped asymmetric unit mmCIF file path."""
+    return data_dir / "1T66.cif.gz"
+
+
+@pytest.fixture(scope="module")
+def bio_assembly_cif_gz_path(data_dir: Path) -> Path:
+    """Fixture to provide gzipped biological assembly mmCIF file path."""
+    return data_dir / "1T66-assembly1.cif.gz"
+
+
 # ruff: noqa: S101
 @pytest.mark.slow
 def test_download_pdb_from_rcsb(tmp_path: Path, pdb_gz_path: Path):
@@ -98,6 +110,32 @@ def test_download_pdb_fallback_to_cif(tmp_path: Path):
     cif_path = downloader.fetch_pdb("9kas", file_type="bio", fallback_to_cif=True)
     assert cif_path.exists()
     assert cif_path.name == "9KAS.cif.gz"
+
+
+@pytest.mark.slow
+def test_download_assembly_and_asu_cif(
+    tmp_path: Path, asu_cif_gz_path: Path, bio_assembly_cif_gz_path: Path
+):
+    """Test downloading asymmetric unit and biological assembly mmCIF files."""
+    downloader = RCSBDownloader(out_dir=tmp_path)
+
+    # Valid types are bio and asu
+    with pytest.raises(ValueError):
+        downloader.fetch_mmcif("1t66", file_type="bioassembly2")
+
+    asu_cif_path = downloader.fetch_mmcif("1t66", file_type="asu")
+    assert asu_cif_path.exists()
+    assert asu_cif_path.name == "1T66.cif.gz"
+    assert asu_cif_path.parent.name == "asu"
+    with open(asu_cif_gz_path, "rb") as f1, open(asu_cif_path, "rb") as f2:
+        assert f1.read() == f2.read()
+
+    bio_cif_path = downloader.fetch_mmcif("1t66", file_type="bio")
+    assert bio_cif_path.exists()
+    assert bio_cif_path.name == "1T66.cif.gz"
+    assert bio_cif_path.parent.name == "bio"
+    with open(bio_assembly_cif_gz_path, "rb") as f1, open(bio_cif_path, "rb") as f2:
+        assert f1.read() == f2.read()
 
 
 @pytest.mark.slow
