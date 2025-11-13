@@ -4,7 +4,12 @@ from typing import Annotated
 
 import typer
 
-from antid.numbering import ValidSchemesType, align_ab_seqs, number_ab_seq
+from antid.numbering import (
+    AssignedSpeciesType,
+    ValidSchemesType,
+    align_ab_seqs,
+    number_ab_seq,
+)
 
 app = typer.Typer()
 
@@ -15,10 +20,7 @@ def number(
     scheme: Annotated[
         ValidSchemesType,
         typer.Option(
-            "--scheme",
-            "-s",
-            help="Numbering scheme to use.",
-            case_sensitive=False,
+            "--scheme", "-s", help="Numbering scheme to use.", case_sensitive=False
         ),
     ] = "imgt",
     assign_germline: Annotated[
@@ -30,11 +32,22 @@ def number(
             is_flag=True,
         ),
     ] = False,
+    species: Annotated[
+        AssignedSpeciesType | None,
+        typer.Option(
+            "--species",
+            "-p",
+            help="Species of the antibody sequence.",
+            case_sensitive=False,
+        ),
+    ] = None,
 ):
     """Number an antibody sequence."""
     # The type hint for species in number_ab_seq is a bit complex,
     # but it can handle a string or a list of strings.
-    numbered_seq = number_ab_seq(seq, scheme=scheme, assign_germline=assign_germline)
+    numbered_seq = number_ab_seq(
+        seq, scheme=scheme, assign_germline=assign_germline, species=species
+    )
     print(numbered_seq.format())
 
 
