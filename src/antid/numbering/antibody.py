@@ -550,14 +550,22 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
     @property
     def imputed_seq(self) -> str:
         """Impute gaps in the FR1/FR4 region with the closest germline."""
-        # TODO: impute seq with first germline
         position_regions = self.aligned_germline.regions.select(
             "region", "numbered_pos"
         ).explode("numbered_pos")
+
+        # impute seq with the first germline
+        keep_germline_id: str = (
+            self.aligned_germline.df.filter(pl.col("seq_id") != pl.lit("Query"))
+            .get_column("seq_id")
+            .item(0)
+        )
         aln = (
-            self.aligned_germline.df.unpivot(
-                index="seq_id", variable_name="numbered_pos", value_name="aa"
+            self.aligned_germline.df.filter(
+                pl.col("seq_id").is_in({"Query", keep_germline_id})
             )
+            .with_columns(pl.col("seq_id").replace(keep_germline_id, "Germline"))
+            .unpivot(index="seq_id", variable_name="numbered_pos", value_name="aa")
             .join(position_regions, on="numbered_pos")
             .pivot(
                 index=("region", "numbered_pos"),
