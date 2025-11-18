@@ -3,7 +3,7 @@
 # ruff: noqa: F401
 from antid.numbering.antibody import (
     AntibodyAlignment,
-    Germline,
+    Germlines,
     NumberedAntibody,
     NumberedAntibodyWithGermline,
     align_ab_seqs,

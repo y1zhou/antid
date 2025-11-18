@@ -15,7 +15,7 @@ __all__ = [
     "AntibodyAlignment",
     "NumberedAntibody",
     "NumberedAntibodyWithGermline",
-    "Germline",
+    "Germlines",
 ]
 
 # Type aliases for clarity
@@ -425,33 +425,38 @@ def align_ab_seqs(
 
 
 @dataclass
-class Germline:
+class Germlines:
     """A class to hold the germline information.
 
+    NOTE: When displaying the germline sequences, only the first J gene is used.
+    All V genes are paired with the first J gene for display purposes.
+
     Attributes:
-        v_gene: The V gene name.
-        j_gene: The J gene name.
+        v_genes: The V gene names.
+        j_genes: The J gene names.
         species: The species assignment for the germline.
-        v_gene_seq: The germline amino acid sequence for the V gene, gapped to be length
+        v_gene_seqs: The germline amino acid sequence for the V gene, gapped to be length
             128 consistent with the IMGT numbering. If the ``v_gene`` did not match
             to a germline, this will be ``None``.
-        j_gene_seq: The germline amino acid sequence for the J gene.
+        j_gene_seqs: The germline amino acid sequence for the J gene.
     """
 
-    v_gene: str
-    j_gene: str
+    v_genes: list[str]
+    j_genes: list[str]
     species: AssignedSpeciesType
-    v_gene_seq: str
-    j_gene_seq: str
+    v_gene_seqs: list[str]
+    j_gene_seqs: list[str]
 
-    def seq(self, trimmed: bool = False) -> str:
-        """Return the merged germline sequence.
+    def seq(self, trimmed: bool = False, v_idx: int = 0, j_idx: int = 0) -> str:
+        """Return the first merged germline sequence.
 
         Args:
             trimmed: If True, trim the sequence to remove gaps.
+            v_idx: The index of the V gene to use.
+            j_idx: The index of the J gene to use.
         """
         merged_seq_aas: list[str] = []
-        for v, j in zip(self.v_gene_seq, self.j_gene_seq, strict=True):
+        for v, j in zip(self.v_gene_seqs[v_idx], self.j_gene_seqs[j_idx], strict=True):
             if j == "-":
                 if v == "-":
                     merged_seq_aas.append("-")
@@ -466,8 +471,17 @@ class Germline:
             else "".join(c for c in merged_seq_aas if c != "-")
         )
 
-    def numbered_seq(self, scheme: ValidSchemesType = "imgt") -> NumberedAntibody:
-        """Return the numbered germline according to the specified scheme."""
+    def numbered_seq(self, scheme: ValidSchemesType = "imgt") -> list[NumberedAntibody]:
+        """Return the first numbered germline according to the specified scheme."""
+        return number_ab_seq(
+            [self.seq(trimmed=True, v_idx=i) for i in range(len(self.v_genes))],
+            scheme,
+            assign_germline=False,
+            species=self.species,
+        )
+
+    def numbered_seqs(self, scheme: ValidSchemesType = "imgt") -> NumberedAntibody:
+        """Return all numbered germlines according to the specified scheme."""
         return number_ab_seq(
             self.seq(trimmed=True), scheme, assign_germline=False, species=self.species
         )
@@ -477,8 +491,8 @@ class Germline:
         return f"""
 IMGT-numbered seq: {self.seq()}
           Species: {self.species}
-           V gene: {self.v_gene}
-           J gene: {self.j_gene}
+           V gene: {self.v_genes}
+           J gene: {self.j_genes}
 """.strip()
 
 
@@ -486,7 +500,7 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
     """A class to hold the numbered sequence and its regions.
 
     Attributes:
-        closest_germline: The closest germline assigned to the sequence.
+        closest_germline: The closest germlines assigned to the sequence.
         aligned_germline: A DataFrame with the aligned germline sequence to the numbered sequence.
             Contains columns "region", "numbered_pos", "seq", and "germline".
             The "fv_idx" column is 1-based and indicates the position in the Fv region.
@@ -503,7 +517,7 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
         chain_type: str,
         error_message: str,
         region_labels: list[str],
-        closest_germline: Germline,
+        closest_germline: Germlines,
     ):
         """Initialize with the output of ``SingleChainAnnotator.analyze_seq``."""
         super().__init__(
@@ -524,15 +538,19 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
         if self._aligned_germline is not None:
             return self._aligned_germline
 
-        self._aligned_germline = AntibodyAlignment(
-            seqs=[self, self.closest_germline.numbered_seq(self.scheme)],
-            seq_ids=["Query", "Germline"],
-        )
+        numbered_seqs = [self, *self.closest_germline.numbered_seq(self.scheme)]
+        seq_ids = ["Query"] + [
+            f"{v}|{self.closest_germline.j_genes[0]}"
+            for v in self.closest_germline.v_genes
+        ]
+
+        self._aligned_germline = AntibodyAlignment(seqs=numbered_seqs, seq_ids=seq_ids)
         return self._aligned_germline
 
     @property
     def imputed_seq(self) -> str:
         """Impute gaps in the FR1/FR4 region with the closest germline."""
+        # TODO: impute seq with first germline
         position_regions = self.aligned_germline.regions.select(
             "region", "numbered_pos"
         ).explode("numbered_pos")
@@ -596,8 +614,8 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
             )
             + f"\n\n\033[1m# Closest germline\033[0m\n\n"
             f"Species: {self.closest_germline.species} ({self.chain_type})\n"
-            f"V gene: {self.closest_germline.v_gene}\n"
-            f"J gene: {self.closest_germline.j_gene}"
+            f"V gene: {self.closest_germline.v_genes}\n"
+            f"J gene: {self.closest_germline.j_genes}"
             f"{germline_alignment_str}"
         )
 
@@ -729,7 +747,7 @@ def _process_alignment_with_germline(
 
     # Assign VJ germline genes
     query_species = "unknown" if species is None else species
-    closest_germline = _assign_closest_germline(
+    closest_germline = _assign_closest_germlines(
         alignment, seq, region_labels, vj_annotator=vj_annotator, species=query_species
     )
     return NumberedAntibodyWithGermline(
@@ -744,16 +762,17 @@ def _process_alignment_with_germline(
     )
 
 
-def _assign_closest_germline(
+def _assign_closest_germlines(
     alignment: AntPackAlignmentType,
     seq: str,
     region_labels: list[str],
     vj_annotator: VJGeneTool,
     species: ValidSpeciesType,
-) -> Germline:
+) -> Germlines:
     """Assign the closest germline to the sequence.
 
-    NOTE: When multiple V/J genes with very close scores are found, the first one in the list is returned.
+    NOTE: When multiple V/J genes with identical scores are found,
+    all gene names are returned.
     """
     # The assignment works best with IMGT numbering
     # Only use Fv region for VJ gene assignment because of upstream issue:
@@ -798,11 +817,15 @@ def _assign_closest_germline(
     if not (v_genes and j_genes):
         raise ValueError(f"Failed to assign V and J genes for sequence: {seq}.")
 
-    v_gene = v_genes.split("_")[0]
-    j_gene = j_genes.split("_")[0]
-    v_seq: str = vj_annotator.get_vj_gene_sequence(v_gene, assigned_species)
-    j_seq: str = vj_annotator.get_vj_gene_sequence(j_gene, assigned_species)
-    return Germline(v_gene, j_gene, assigned_species, v_seq, j_seq)
+    v_gene_names: list[str] = v_genes.split("_")
+    j_gene_names: list[str] = j_genes.split("_")
+    v_seqs: list[str] = [
+        vj_annotator.get_vj_gene_sequence(v, assigned_species) for v in v_gene_names
+    ]
+    j_seqs: list[str] = [
+        vj_annotator.get_vj_gene_sequence(j, assigned_species) for j in j_gene_names
+    ]
+    return Germlines(v_gene_names, j_gene_names, assigned_species, v_seqs, j_seqs)
 
 
 def _build_alignment_indicator(seq1: str, seq2: str) -> str:

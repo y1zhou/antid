@@ -94,8 +94,8 @@ def test_number_ab_seq_single_with_germline(vh_germline_imgt, vl_germline_imgt):
     assert vl_germline_imgt.chain_type == "K"
     assert vl_germline_imgt.closest_germline is not None
     assert vl_germline_imgt.closest_germline.species == "human"
-    assert "IGKV" in vl_germline_imgt.closest_germline.v_gene
-    assert "IGKJ" in vl_germline_imgt.closest_germline.j_gene
+    assert "IGKV" in vl_germline_imgt.closest_germline.v_genes[0]
+    assert "IGKJ" in vl_germline_imgt.closest_germline.j_genes[0]
 
 
 def test_number_ab_seq_germline_assignment(vh_germline_martin, vh_germline_imgt):
@@ -146,11 +146,11 @@ def test_numbered_antibody_regions(vh_martin, vh_germline_imgt):
 
 def test_numbered_antibody_with_germline_properties(vl_germline_imgt):
     """Test properties of the NumberedAntibodyWithGermline class."""
-    assert vl_germline_imgt.closest_germline.v_gene is not None
-    assert vl_germline_imgt.closest_germline.j_gene is not None
+    assert vl_germline_imgt.closest_germline.v_genes is not None
+    assert vl_germline_imgt.closest_germline.j_genes is not None
     aln = vl_germline_imgt.aligned_germline
     assert isinstance(aln, AntibodyAlignment)
-    assert aln.df.get_column("seq_id").to_list() == ["Germline", "Query"]
+    assert aln.df.get_column("seq_id").to_list() == ["IGKV3D-11*01|IGKJ4*01", "Query"]
 
 
 def test_format_methods(vh_martin):
