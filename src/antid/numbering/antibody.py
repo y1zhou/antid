@@ -9,7 +9,14 @@ from loguru import logger
 from antid.utils.constant import SIMILAR_PAIRS
 from antid.utils.patch_antpack import SingleChainAnnotator, VJGeneTool
 
-__all__ = ["number_ab_seq", "align_ab_seqs", "AntibodyAlignment"]
+__all__ = [
+    "number_ab_seq",
+    "align_ab_seqs",
+    "AntibodyAlignment",
+    "NumberedAntibody",
+    "NumberedAntibodyWithGermline",
+    "Germline",
+]
 
 # Type aliases for clarity
 ValidSchemesType = Literal["imgt", "martin", "kabat", "aho"]
@@ -294,6 +301,10 @@ class AntibodyAlignment:
             .select("seq_id", *sorted_position_codes)
             .sort("seq_id")
         )
+
+    def __repr__(self) -> str:
+        """Return a string representation of the alignment."""
+        return self.format()
 
     def format(self, highlight_cdr: bool = True, ref_seq_id: str | None = None) -> str:
         """Format the alignment with optional CDR highlighting and germline alignment."""

@@ -6,10 +6,10 @@ from antid.numbering import (
     AntibodyAlignment,
     NumberedAntibody,
     NumberedAntibodyWithGermline,
-    _build_alignment_indicator,
     align_ab_seqs,
     number_ab_seq,
 )
+from antid.numbering.antibody import _build_alignment_indicator
 
 # Pembrolizumab sequences extracted from PDB ID 5b8c
 VH_SEQ = "QVQLVQSGVEVKKPGASVKVSCKASGYTFTNYYMYWVRQAPGQGLEWMGGINPSNGGTNFNEKFKNRVTLTTDSSTTTAYMELKSLQFDDTAVYYCARRDYRFDMGFDYWGQGTTVTVSS"
