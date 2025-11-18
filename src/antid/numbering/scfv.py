@@ -1,6 +1,6 @@
 """Antibody numbering utilities."""
 
-from typing import Literal, overload
+from typing import overload
 
 from antid.numbering.antibody import (
     AntPackAlignmentType,
@@ -32,6 +32,7 @@ class NumberedScFv:
         """Return a string representation of the NumberedScFv."""
         return f"""
 VH: {self.vh.format()}
+
 VL: {self.vl.format()}
 """.strip()
 
@@ -40,30 +41,16 @@ VL: {self.vl.format()}
 def number_scfv_seq(
     seq: str,
     scheme: ValidSchemesType,
-    assign_germline: Literal[False] = ...,
+    assign_germline: bool = ...,
     species: ValidSpeciesType | None = ...,
-) -> NumberedAntibody: ...
-@overload
-def number_scfv_seq(
-    seq: str,
-    scheme: ValidSchemesType,
-    assign_germline: Literal[True] = ...,
-    species: ValidSpeciesType | None = ...,
-) -> NumberedAntibodyWithGermline: ...
+) -> NumberedScFv: ...
 @overload
 def number_scfv_seq(
     seq: list[str],
     scheme: ValidSchemesType,
-    assign_germline: Literal[False] = ...,
+    assign_germline: bool = ...,
     species: ValidSpeciesType | None = ...,
-) -> list[NumberedAntibody]: ...
-@overload
-def number_scfv_seq(
-    seq: list[str],
-    scheme: ValidSchemesType,
-    assign_germline: Literal[True] = ...,
-    species: ValidSpeciesType | None = ...,
-) -> list[NumberedAntibodyWithGermline]: ...
+) -> list[NumberedScFv]: ...
 def number_scfv_seq(
     seq: str | list[str],
     scheme: ValidSchemesType,
@@ -90,12 +77,22 @@ def number_scfv_seq(
                 alignments, seq, chain_annotator, vj_annotator, scheme, species
             )
         elif isinstance(seq, list) and all(isinstance(s, str) for s in seq):
-            alignments: list[AntPackAlignmentType] = chain_annotator.analyze_seqs(seq)
+            alignments: tuple[
+                list[AntPackAlignmentType], list[AntPackAlignmentType]
+            ] = chain_annotator.analyze_seqs(seq)
+            vh_alignments, vl_alignments = alignments
             return [
                 _process_scfv_alignment_with_germline(
-                    alignment, s, chain_annotator, vj_annotator, scheme, species
+                    (vh_alignment, vl_alignment),
+                    s,
+                    chain_annotator,
+                    vj_annotator,
+                    scheme,
+                    species,
                 )
-                for alignment, s in zip(alignments, seq, strict=True)
+                for vh_alignment, vl_alignment, s in zip(
+                    vh_alignments, vl_alignments, seq, strict=True
+                )
             ]
         else:
             raise TypeError(
@@ -103,13 +100,20 @@ def number_scfv_seq(
             )
     else:
         if isinstance(seq, str):
-            alignment: AntPackAlignmentType = chain_annotator.analyze_seq(seq)
-            return _process_scfv_alignment(alignment, seq, chain_annotator, scheme)
+            alignments: AntPackAlignmentType = chain_annotator.analyze_seq(seq)
+            return _process_scfv_alignment(alignments, seq, chain_annotator, scheme)
         elif isinstance(seq, list) and all(isinstance(s, str) for s in seq):
-            alignments: list[AntPackAlignmentType] = chain_annotator.analyze_seqs(seq)
+            alignments: tuple[
+                list[AntPackAlignmentType], list[AntPackAlignmentType]
+            ] = chain_annotator.analyze_seqs(seq)
+            vh_alignments, vl_alignments = alignments
             return [
-                _process_scfv_alignment(alignment, s, chain_annotator, scheme)
-                for alignment, s in zip(alignments, seq, strict=True)
+                _process_scfv_alignment(
+                    (vh_alignment, vl_alignment), s, chain_annotator, scheme
+                )
+                for vh_alignment, vl_alignment, s in zip(
+                    vh_alignments, vl_alignments, seq, strict=True
+                )
             ]
         else:
             raise TypeError(
