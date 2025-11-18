@@ -117,6 +117,8 @@ def test_download_assembly_and_asu_cif(
     tmp_path: Path, asu_cif_gz_path: Path, bio_assembly_cif_gz_path: Path
 ):
     """Test downloading asymmetric unit and biological assembly mmCIF files."""
+    import gzip
+
     downloader = RCSBDownloader(out_dir=tmp_path)
 
     # Valid types are bio and asu
@@ -134,7 +136,10 @@ def test_download_assembly_and_asu_cif(
     assert bio_cif_path.exists()
     assert bio_cif_path.name == "1T66.cif.gz"
     assert bio_cif_path.parent.name == "bio"
-    with open(bio_assembly_cif_gz_path, "rb") as f1, open(bio_cif_path, "rb") as f2:
+    with (
+        gzip.open(bio_assembly_cif_gz_path, "rb") as f1,
+        gzip.open(bio_cif_path, "rb") as f2,
+    ):
         assert f1.read() == f2.read()
 
 
