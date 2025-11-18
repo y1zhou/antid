@@ -9,3 +9,4 @@ from antid.numbering.antibody import (
     align_ab_seqs,
     number_ab_seq,
 )
+from antid.numbering.scfv import NumberedScFv, number_scfv_seq

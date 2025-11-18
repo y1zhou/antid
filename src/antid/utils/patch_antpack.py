@@ -13,7 +13,11 @@ from pathlib import Path
 
 import antpack
 import numpy as np
-from antpack.antpack_cpp_ext import SingleChainAnnotatorCpp, VJMatchCounter
+from antpack.antpack_cpp_ext import (
+    PairedChainAnnotatorCpp,
+    SingleChainAnnotatorCpp,
+    VJMatchCounter,
+)
 from antpack.numbering_tools.cterm_finder import _load_nterm_kmers
 
 from antid.utils import check_path
@@ -125,3 +129,23 @@ class SingleChainAnnotator(SingleChainAnnotatorCpp):
         if chains is None:
             chains = ["H", "K", "L"]
         super().__init__(chains, scheme, consensus_path, kmer_dict)
+
+
+class PairedChainAnnotator(PairedChainAnnotatorCpp):
+    """Patched version of antpack.PairedChainAnnotator."""
+
+    def __init__(self, scheme="imgt", receptor_type="mab"):
+        """Class constructor.
+
+        Args:
+            scheme (str): The numbering scheme. Must be one of "imgt",
+                "martin", "kabat", "aho". If receptor_type is 'tcr'
+                only "imgt" is accepted.
+            receptor_type (str): One of "mab", "tcr". Default is "mab"
+                (antibody).
+
+        Raises:
+            RuntimeError: A RuntimeError is raised if unacceptable inputs are
+                supplied.
+        """
+        super().__init__(scheme, consensus_path, kmer_dict, receptor_type)
