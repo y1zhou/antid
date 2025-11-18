@@ -28,13 +28,17 @@ class NumberedScFv:
         self.vh = vh
         self.vl = vl
 
-    def __repr__(self) -> str:
-        """Return a string representation of the NumberedScFv."""
+    def format(self) -> str:
+        """Simply combine the individual chains in the output."""
         return f"""
 VH: {self.vh.format()}
 
 VL: {self.vl.format()}
 """.strip()
+
+    def __repr__(self) -> str:
+        """Return a string representation of the NumberedScFv."""
+        return self.format()
 
 
 @overload

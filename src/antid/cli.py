@@ -4,12 +4,8 @@ from typing import Annotated
 
 import typer
 
-from antid.numbering import (
-    AssignedSpeciesType,
-    ValidSchemesType,
-    align_ab_seqs,
-    number_ab_seq,
-)
+from antid.numbering import align_ab_seqs, number_ab_seq
+from antid.numbering.antibody import AssignedSpeciesType, ValidSchemesType
 
 app = typer.Typer()
 
@@ -41,13 +37,26 @@ def number(
             case_sensitive=False,
         ),
     ] = None,
+    scfv: Annotated[
+        bool,
+        typer.Option(
+            "--scfv",
+            help="Indicates that the input sequence is a single-chain variable fragment (scFv).",
+            is_flag=True,
+        ),
+    ] = False,
 ):
     """Number an antibody sequence."""
-    # The type hint for species in number_ab_seq is a bit complex,
-    # but it can handle a string or a list of strings.
-    numbered_seq = number_ab_seq(
-        seq, scheme=scheme, assign_germline=assign_germline, species=species
-    )
+    if scfv:
+        from antid.numbering.scfv import number_scfv_seq
+
+        numbered_seq = number_scfv_seq(
+            seq, scheme=scheme, assign_germline=assign_germline, species=species
+        )
+    else:
+        numbered_seq = number_ab_seq(
+            seq, scheme=scheme, assign_germline=assign_germline, species=species
+        )
     print(numbered_seq.format())
 
 
