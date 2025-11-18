@@ -266,7 +266,7 @@ def test_impute_missing_res_with_germline():
     assert numbered.imputed_seq == VH_SEQ
 
 
-def test_number_scfv_seq(vh_martin, vl_martin):
+def test_number_scfv_seq(vh_martin, vl_martin, vh_germline_imgt, vl_germline_imgt):
     """Test numbering of scFv sequences."""
     from antid.numbering import NumberedScFv, number_scfv_seq
 
@@ -291,6 +291,26 @@ def test_number_scfv_seq(vh_martin, vl_martin):
     for scfv in numbered_list:
         assert scfv.vh.fv_seq == vh_martin.fv_seq
         assert scfv.vl.fv_seq == vl_martin.fv_seq
+
+    # Test with germline (scheme should not affect germline assignment)
+    scfv_with_germline = number_scfv_seq(vh_gs_vl, "martin", assign_germline=True)
+    assert isinstance(scfv_with_germline, NumberedScFv)
+    assert scfv_with_germline.vh.closest_germline == vh_germline_imgt.closest_germline
+    assert scfv_with_germline.vl.closest_germline == vl_germline_imgt.closest_germline
+
+    # Test list input with germline
+    numbered_list_germline = number_scfv_seq(
+        [vh_gs_vl, vl_gs_vh], "imgt", assign_germline=True
+    )
+    assert isinstance(numbered_list_germline, list)
+    assert len(numbered_list_germline) == 2
+    assert all(isinstance(n, NumberedScFv) for n in numbered_list_germline)
+    assert numbered_list_germline[0].vh.closest_germline == (
+        numbered_list_germline[1].vh.closest_germline
+    )
+    assert numbered_list_germline[0].vl.closest_germline == (
+        numbered_list_germline[1].vl.closest_germline
+    )
 
 
 def test_patch_antpack_identical():
