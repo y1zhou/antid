@@ -266,6 +266,33 @@ def test_impute_missing_res_with_germline():
     assert numbered.imputed_seq == VH_SEQ
 
 
+def test_number_scfv_seq(vh_martin, vl_martin):
+    """Test numbering of scFv sequences."""
+    from antid.numbering import NumberedScFv, number_scfv_seq
+
+    g4s_4 = "GGGGS" * 4
+    vh_gs_vl = VH_SEQ + g4s_4 + VL_SEQ
+
+    scfv = number_scfv_seq(vh_gs_vl, "martin", assign_germline=False)
+    assert isinstance(scfv, NumberedScFv)
+    assert scfv.vh.fv_seq == vh_martin.fv_seq
+    assert scfv.vl.fv_seq == vl_martin.fv_seq
+    assert scfv.vl.fv_range[0] == len(VH_SEQ) + 20 + 1
+
+    # Test with list input
+    vl_gs_vh = VL_SEQ + g4s_4 + VH_SEQ
+    numbered_list = number_scfv_seq(
+        [vh_gs_vl, vl_gs_vh], "martin", assign_germline=False
+    )
+    assert isinstance(numbered_list, list)
+    assert len(numbered_list) == 2
+    assert all(isinstance(n, NumberedScFv) for n in numbered_list)
+
+    for scfv in numbered_list:
+        assert scfv.vh.fv_seq == vh_martin.fv_seq
+        assert scfv.vl.fv_seq == vl_martin.fv_seq
+
+
 def test_patch_antpack_identical():
     """Test that the patched functions work the same as the original."""
     from antpack import SingleChainAnnotator as original_sc
