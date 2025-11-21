@@ -61,6 +61,10 @@ def test_number_ab_seq_single_no_germline(vh_martin, vl_martin):
     assert vl_martin.fv_seq == VL_SEQ[:111]  # trailing TSENLYFQ is not Fv
     assert vl_martin.chain_type == "K"
 
+    # Martin scheme has no gaps for this sequence
+    assert vh_martin.scheme_aligned_seq == VH_SEQ
+    assert vl_martin.scheme_aligned_seq == VL_SEQ[:111]
+
     # magic methods
     assert len(vh_martin) == len(VH_SEQ)
     assert str(vh_martin) == VH_SEQ
@@ -96,6 +100,16 @@ def test_number_ab_seq_single_with_germline(vh_germline_imgt, vl_germline_imgt):
     assert vl_germline_imgt.closest_germline.species == "human"
     assert "IGKV" in vl_germline_imgt.closest_germline.v_genes[0]
     assert "IGKJ" in vl_germline_imgt.closest_germline.j_genes[0]
+
+    # IMGT scheme has gaps for this sequence
+    assert (
+        vh_germline_imgt.scheme_aligned_seq
+        == "QVQLVQSGV-EVKKPGASVKVSCKASGYTF----TNYYMYWVRQAPGQGLEWMGGINPS--NGGTNFNEKFK-NRVTLTTDSSTTTAYMELKSLQFDDTAVYYCARRDYRFDMGFDYWGQGTTVTVSS"
+    )
+    assert (
+        vl_germline_imgt.scheme_aligned_seq
+        == "EIVLTQSPATLSLSPGERATLSCRASKGVST--SGYSYLHWYQQKPGQAPRLLIYLA-------SYLESGVP-ARFSGSG--SGTDFTLTISSLEPEDFAVYYCQHSRD----LPLTFGGGTKVEIK-"  # TODO: see if the - at position 128 is a bug
+    )
 
 
 def test_number_ab_seq_germline_assignment(vh_germline_martin, vh_germline_imgt):

@@ -32,6 +32,7 @@ class NumberedAntibody:
         seq: The input antibody sequence.
         scheme: The numbering scheme used ("imgt", "martin", "kabat", or "aho").
         chain_type: Assigned chain type ("H", "L", or "K").
+        scheme_aligned_seq: The Fv sequence aligned to the numbering scheme (with gaps).
         position: A DataFrame with the numbered positions and their corresponding amino acids.
         regions: A DataFrame with the start, end, and sequence of each region. Note that
             the indices are 1-based and inclusive.
@@ -51,12 +52,14 @@ class NumberedAntibody:
         chain_type: str,
         error_message: str,
         region_labels: list[str],
+        scheme_aligned_seq: str,
     ):
         """Initialize with the output of ``SingleChainAnnotator.analyze_seq``."""
         self.seq = seq
         self.scheme: ValidSchemesType = scheme
         self.chain_type = chain_type
         self._raw = (numbering, percent_identity, chain_type, error_message)
+        self.scheme_aligned_seq = scheme_aligned_seq
 
         self._process_regions(numbering, region_labels)
 
@@ -517,6 +520,7 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
         chain_type: str,
         error_message: str,
         region_labels: list[str],
+        scheme_aligned_seq: str,
         closest_germline: Germlines,
     ):
         """Initialize with the output of ``SingleChainAnnotator.analyze_seq``."""
@@ -528,9 +532,26 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
             chain_type,
             error_message,
             region_labels,
+            scheme_aligned_seq,
         )
         self.closest_germline = closest_germline
         self._aligned_germline = None
+
+    @classmethod
+    def from_numbered_antibody(
+        cls,
+        numbered_ab: NumberedAntibody,
+        closest_germline: Germlines,
+    ) -> "NumberedAntibodyWithGermline":
+        """Create a NumberedAntibodyWithGermline from a NumberedAntibody."""
+        return cls(
+            numbered_ab.seq,
+            numbered_ab.scheme,
+            *numbered_ab._raw,
+            numbered_ab.position.get_column("region").to_list(),
+            numbered_ab.scheme_aligned_seq,
+            closest_germline,
+        )
 
     @property
     def aligned_germline(self) -> AntibodyAlignment:
@@ -737,8 +758,20 @@ def _process_alignment(
     numbering, percent_identity, chain_type, err = alignment
     region_labels: list[str] = _assign_region_labels(alignment, chain_annotator)
 
+    trimmed_seq, trimmed_aln, *_ = chain_annotator.trim_alignment(seq, alignment)
+    _, aligned_seqs = chain_annotator.build_msa(
+        [trimmed_seq], [(trimmed_aln, *alignment[1:])], add_unobserved_positions=True
+    )
+
     return NumberedAntibody(
-        seq, scheme, numbering, percent_identity, chain_type, err, region_labels
+        seq,
+        scheme,
+        numbering,
+        percent_identity,
+        chain_type,
+        err,
+        region_labels,
+        aligned_seqs[0],
     )
 
 
@@ -750,23 +783,16 @@ def _process_alignment_with_germline(
     scheme: ValidSchemesType,
     species: ValidSpeciesType | None,
 ) -> NumberedAntibodyWithGermline:
-    numbering, percent_identity, chain_type, err = alignment
-    region_labels: list[str] = _assign_region_labels(alignment, chain_annotator)
+    numbered_ab = _process_alignment(alignment, seq, chain_annotator, scheme)
+    region_labels = numbered_ab.position.get_column("region").to_list()
 
     # Assign VJ germline genes
     query_species = "unknown" if species is None else species
     closest_germline = _assign_closest_germlines(
         alignment, seq, region_labels, vj_annotator=vj_annotator, species=query_species
     )
-    return NumberedAntibodyWithGermline(
-        seq,
-        scheme,
-        numbering,
-        percent_identity,
-        chain_type,
-        err,
-        region_labels,
-        closest_germline,
+    return NumberedAntibodyWithGermline.from_numbered_antibody(
+        numbered_ab, closest_germline
     )
 
 
