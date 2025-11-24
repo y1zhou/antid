@@ -6,7 +6,7 @@ from typing import Literal, overload
 import polars as pl
 from loguru import logger
 
-from antid.utils.constant import SIMILAR_PAIRS
+from antid.utils.constant import AA3TO1, SIMILAR_PAIRS
 from antid.utils.patch_antpack import SingleChainAnnotator, VJGeneTool
 
 __all__ = [
@@ -314,10 +314,30 @@ class AntibodyAlignment:
         aligned_strs = self._build_alignment_str(highlight_cdr, ref_seq_id)
         max_seq_id_len = max(len(seq_id) for seq_id, _, _ in aligned_strs)
         space = " " * (max_seq_id_len + 2)  # +2 for ": "
-        return "".join(
+        alignment = "".join(
             f"\n{space}{aln_indicator}\n{seq_id:>{max_seq_id_len}}: {seq}"
             for seq_id, seq, aln_indicator in aligned_strs
-        )
+        ).strip("\n")
+
+        # Build header with absolute positions for the reference sequence
+        # We make a safe assumption that the sequences are not longer than 999 AAs
+        digit1, digit2 = "", ""
+        d2_width = 0
+        gap_offset = 0
+        valid_tokens = set(AA3TO1.values()) | {"-"}
+        ref_tokens = [c for c in aligned_strs[0][1] if c in valid_tokens]
+        for i, char in enumerate(ref_tokens, start=1):
+            d2_width += 1
+            if char == "-":
+                gap_offset += 1
+                digit1 += " "
+            else:
+                digit1 += str(i - gap_offset)[-1]
+
+            if digit1[-1] == "0":
+                digit2 += f"{((i - gap_offset) // 10):>{d2_width}}"
+                d2_width = 0
+        return f"\n{space}{digit2}\n{space}{digit1}{alignment}"
 
     def _build_alignment_str(
         self, highlight_cdr: bool = True, ref_seq_id: str | None = None

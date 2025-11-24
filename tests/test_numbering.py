@@ -224,9 +224,14 @@ def test_align_ab_seqs(vh_martin):
 
     # Test rearranging alignment strings
     aln_fmt = alignment.format(highlight_cdr=False)
-    assert aln_fmt.strip().startswith("Query: ")
+    aln_10digit, aln_1digit, aln_content = aln_fmt.strip("\n").split("\n", maxsplit=2)
+    assert aln_content.strip().startswith("Query: ")
+    assert aln_10digit[-2:] == "12"
+    assert aln_1digit.strip()[-1] == "0"
+
     aln_refmt = alignment.format(highlight_cdr=False, ref_seq_id="Variant")
-    assert aln_refmt.strip().startswith("Variant: ")
+    *_, aln_content = aln_refmt.strip("\n").split("\n", maxsplit=2)
+    assert aln_content.strip().startswith("Variant: ")
     with pytest.raises(
         KeyError, match=r"Reference sequence ID XX not found in alignment"
     ):
@@ -244,6 +249,13 @@ def test_align_ab_seqs(vh_martin):
         match=r"Number of sequences \(2\) does not match number of IDs \(3\)",
     ):
         align_ab_seqs(seqs=seqs_to_align, seq_ids=["Query", "Variant", "Extra"])
+
+    # Test alignment with highlighted CDRs
+    aln_fmt = alignment.format(highlight_cdr=True)
+    aln_10digit, aln_1digit, aln_content = aln_fmt.strip("\n").split("\n", maxsplit=2)
+    assert aln_content.strip().startswith("Query: ")
+    assert aln_10digit[-2:] == "12"
+    assert aln_1digit.strip()[-1] == "0"
 
 
 def test_align_ab_seqs_empty_list():
