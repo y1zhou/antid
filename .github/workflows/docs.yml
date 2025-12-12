@@ -1,0 +1,37 @@
+name: "docs"
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - ".github/workflows/docs.yml"
+      - "zensical.toml"
+      - "docs/**"
+      - "src/**"
+
+jobs:
+  docs:
+    name: "Build and Deploy Docs"
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.zensical.outputs.page_url }}
+
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v4
+
+      - name: "Zensical Action"
+        id: zensical
+        uses: cssnr/zensical-action@v1
+
+      - name: "Echo Outputs"
+        run: |
+          echo "page_url: ${{ steps.zensical.outputs.page_url }}"
+          echo "version: ${{ steps.zensical.outputs.version }}"
+          echo "path: ${{ steps.zensical.outputs.path }}"
+          echo "name: ${{ steps.zensical.outputs.name }}"
