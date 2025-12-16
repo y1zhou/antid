@@ -157,7 +157,7 @@ def standardize_struct_file(
     output_file: str | Path,
     restart_each_chain: bool = True,
     chain_mapping: dict[str, str] | None = None,
-    remove_waters: bool = True,
+    remove_waters: bool = False,
     remove_ligands_and_waters: bool = False,
     # Antibody-specific
     vh_chain: str | None = None,
@@ -221,6 +221,9 @@ def standardize_struct_file(
 
     # Rename chains if a mapping is provided
     model = st[0]
+    for i, _ in enumerate(st):
+        if i > 0:
+            del st[i]
     all_chains = {c.name for c in model}
     if chain_mapping is not None:
         model_chains = chain_mapping.copy()
@@ -229,6 +232,12 @@ def standardize_struct_file(
                 raise ValueError(f"Chain {c} not found in {all_chains}: {input_file}")
     else:
         model_chains: dict[str, str] = {c: c for c in all_chains}
+
+    # Remove chains that are not in the mapping
+    for c in all_chains.difference(model_chains):
+        model.remove_chain(c)
+    st.remove_empty_chains()
+
     for old_chain_id, new_chain_id in model_chains.items():
         st.rename_chain(old_chain_id, new_chain_id)
 
@@ -247,10 +256,6 @@ def standardize_struct_file(
         chains_to_number.append(vl_chain)
 
     for chain in model:
-        if chain.name not in model_chains_rev:
-            model.remove_chain(chain.name)
-            continue
-
         old_chain_id = model_chains_rev[chain.name]
 
         if chain.name in chains_to_number:
