@@ -359,27 +359,27 @@ class AntibodyAlignment:
             alignment indicators field being an empty string.
         """
         if ref_seq_id is None:
-            ref_seq_id: str = self.df.item(0, "seq_id")
-        elif ref_seq_id not in self.df.get_column("seq_id").to_list():
-            raise KeyError(
-                f"Reference sequence ID {ref_seq_id} not found in alignment."
-            )
+            ref_id: str = self.df.item(0, "seq_id")
+        else:
+            ref_id = ref_seq_id
+        if ref_id not in self.df.get_column("seq_id").to_list():
+            raise KeyError(f"Reference sequence ID {ref_id} not found in alignment.")
 
         # Make the alignment rows (|, ., +,  and' ')
-        seq_id_order = [ref_seq_id] + (
-            self.df.filter(pl.col("seq_id") != pl.lit(ref_seq_id))
+        seq_id_order = [ref_id] + (
+            self.df.filter(pl.col("seq_id") != pl.lit(ref_id))
             .get_column("seq_id")
             .to_list()
         )
         aligned_seqs = self.df.select(
             "seq_id", pl.concat_str(self.numbered_pos).alias("seq")
         )
-        ref_seq: str = aligned_seqs.filter(pl.col("seq_id") == pl.lit(ref_seq_id)).item(
+        ref_seq: str = aligned_seqs.filter(pl.col("seq_id") == pl.lit(ref_id)).item(
             0, "seq"
         )
-        other_seqs_df = aligned_seqs.filter(
-            pl.col("seq_id") != pl.lit(ref_seq_id)
-        ).sort("seq_id")
+        other_seqs_df = aligned_seqs.filter(pl.col("seq_id") != pl.lit(ref_id)).sort(
+            "seq_id"
+        )
         other_seq_ids: list[str] = other_seqs_df.get_column("seq_id").to_list()
         other_seqs: list[str] = other_seqs_df.get_column("seq").to_list()
 
@@ -388,7 +388,7 @@ class AntibodyAlignment:
         ]
         if not highlight_cdr:
             # No need to worry about coloring
-            return [(ref_seq_id, ref_seq, "")] + list(
+            return [(ref_id, ref_seq, "")] + list(
                 zip(other_seq_ids, other_seqs, aln_indicator, strict=True)
             )
 
@@ -643,9 +643,9 @@ class NumberedAntibodyWithGermline(NumberedAntibody):
 
     def format(
         self,
-        show_germline: bool = True,
         include_non_fv: bool = True,
         highlight_cdr: bool = True,
+        show_germline: bool = True,
     ) -> str:
         """Format the numbered sequence with optional CDR highlighting and germline alignment."""
         if not show_germline:
