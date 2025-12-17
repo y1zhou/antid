@@ -1,5 +1,48 @@
 """Constants related to antibody (and general protein) sequences and structures."""
 
+#: List of amino acids in single-letter code, grouped by physiochemical properties.
+AA1_BY_PROP = [
+    # Unique
+    "G",
+    "P",
+    "C",
+    # Charged (+)
+    "R",
+    "K",
+    "H",
+    # Charged (-)
+    "D",
+    "E",
+    # Polar-neutral
+    "N",
+    "Q",
+    "S",
+    "T",
+    # Aromatic
+    "Y",
+    "F",
+    "W",
+    # Hydrophobic
+    "I",
+    "V",
+    "L",
+    "A",
+    "M",
+    # Sometimes there's also "X", "*", "-", etc. tokens
+]
+
+#: List of tuples for amino acid physiochemical property groups.
+#: Each tuple contains the label string and the corresponding start and end
+#: indices in `AA1_BY_PROP` (inclusive).
+AA1_GROUP_LABEL = [
+    ("Unique", 0, 2),
+    ("(+)", 3, 5),
+    ("(-)", 6, 7),
+    ("Polar-neutral", 8, 11),
+    ("Aromatic", 12, 14),
+    ("Non-polar", 15, 19),
+]
+
 AA3TO1: dict[str, str] = {
     "ALA": "A",
     "CYS": "C",
