@@ -219,3 +219,60 @@ def test_standardize_struct_file_subset_chain(tmp_path, data_dir):
             tmp_path / "5b8c_standardized_subset.pdb",
             chain_mapping={"X": "A"},
         )
+
+
+def test_standardize_struct_file_ab_numbering(tmp_path, data_dir):
+    """Test renumbering of PDB files using antibody numbering schemes."""
+    vl_resi_map = standardize_struct_file(
+        data_dir / "1T66.cif.gz",
+        tmp_path / "1t66_standardized_abnum.pdb",
+        remove_waters=True,
+        chain_mapping={"L": "A"},
+        vl_chain="A",
+        numbering_scheme="imgt",
+    )
+    vl_chain_df = struct2df(tmp_path / "1t66_standardized_abnum.pdb").unique(
+        ("chain", "resi", "insertion"), maintain_order=True, keep="first"
+    )
+
+    # Check that the VL chain has been renumbered according to IMGT
+    assert vl_resi_map.height == 112
+    assert vl_chain_df.height == 112
+    assert vl_chain_df.get_column("resi").min() == 1
+    assert vl_chain_df.get_column("resi").max() == 127
+
+    # Similarly for the VH
+    vh_resi_map = standardize_struct_file(
+        data_dir / "1T66.cif.gz",
+        tmp_path / "1t66_standardized_abnum.pdb",
+        remove_waters=True,
+        chain_mapping={"H": "H"},
+        vh_chain="H",
+        numbering_scheme="martin",
+    )
+    vh_chain_df = struct2df(tmp_path / "1t66_standardized_abnum.pdb").unique(
+        ("chain", "resi", "insertion"), maintain_order=True, keep="first"
+    )
+    assert vh_resi_map.height == 118
+    assert vh_chain_df.height == 118
+    assert vh_chain_df.get_column("resi").min() == 1
+    assert vh_chain_df.get_column("resi").max() == 113
+
+    # Multiple chains would also work
+    both_resi_map = standardize_struct_file(
+        data_dir / "1T66.cif.gz",
+        tmp_path / "1t66_standardized_abnum.pdb",
+        remove_waters=True,
+        chain_mapping={"L": "L", "H": "H", "C": "C"},
+        vl_chain="L",
+        vh_chain="H",
+        numbering_scheme="imgt",
+    )
+    assert both_resi_map.filter(pl.col("old_chain").is_in({"H", "L"})).height == 230
+    assert both_resi_map.filter(pl.col("old_chain") == "L").height == 112
+    assert both_resi_map.filter(pl.col("old_chain") == "H").height == 118
+
+    # The non-antibody chains should be renumbered serially
+    non_ab_chain_df = both_resi_map.filter(pl.col("old_chain") == pl.lit("C"))
+    assert non_ab_chain_df.height == non_ab_chain_df.get_column("new_resi").max()
+    assert non_ab_chain_df.height == non_ab_chain_df.get_column("new_resi").n_unique()
