@@ -307,7 +307,7 @@ def standardize_struct_file(
             resi = 1 if restart_each_chain else prev_resi + 1
             for res in chain:
                 res_map.append(
-                    (  # pyrefly: ignore[bad-argument-type]
+                    (  # pyrefly: ignore[bad-argument-type] #ty: ignore[invalid-argument-type]
                         model.num,
                         old_chain_id,
                         res.seqid.num,
