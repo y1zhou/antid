@@ -162,14 +162,16 @@ def mutational_heatmap(
             horizontalalignment="right",
             transform=ax.transData,
         )
+        y_start, y_end = num_aa - (start + 0.125), num_aa - (end + 1 - 0.125)
         bar = Line2D(
             [-1.25, -1.25],
-            [num_aa - (start + 0.125), num_aa - (end + 1 - 0.125)],
+            [y_start, y_end],
             transform=ax.transData,
             color="grey",
         )
         bar.set_clip_on(False)
         ax.add_line(bar)
+        ax.axhline(y=y_end - 0.1, color="white", alpha=0.7, linewidth=2.0)
 
     # Highlight WT sequence (dot) and outline high-freq amino acids
     aa = dat.drop("Position").columns

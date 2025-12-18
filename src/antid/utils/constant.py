@@ -34,13 +34,13 @@ AA1_BY_PROP = [
 #: List of tuples for amino acid physiochemical property groups.
 #: Each tuple contains the label string and the corresponding start and end
 #: indices in `AA1_BY_PROP` (inclusive).
-AA1_GROUP_LABEL = [
+AA1_GROUP_LABEL: list[tuple[str, int, int]] = [
     ("Unique", 0, 2),
     ("(+)", 3, 5),
     ("(-)", 6, 7),
     ("Polar-neutral", 8, 11),
     ("Aromatic", 12, 14),
-    ("Non-polar", 15, 19),
+    ("Hydrophobic", 15, 19),
 ]
 
 AA3TO1: dict[str, str] = {
